@@ -129,7 +129,11 @@
 
                     <!-- Critical Temp (Tc) -->
                     <div>
-                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Critical Temp ($T_c$)</label>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider" for="in-Tc">Critical Temp ($T_c$)</label>
+                            <span class="text-sm font-bold text-ttu-purple font-mono" id="val-Tc">369.8 K</span>
+                        </div>
+                        <input type="range" id="slider-Tc" min="100" max="800" step="1" value="369.8" class="w-full mb-2">
                         <div class="relative">
                             <input type="number" id="in-Tc" value="369.8" step="any" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition pr-10">
                             <span class="absolute right-3 top-1.5 text-xs font-bold text-slate-400 select-none">K</span>
@@ -138,7 +142,11 @@
 
                     <!-- Critical Pressure (Pc) -->
                     <div>
-                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Critical Pressure ($P_c$)</label>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider" for="in-Pc">Critical Pressure ($P_c$)</label>
+                            <span class="text-sm font-bold text-ttu-purple font-mono" id="val-Pc">42.48 bar</span>
+                        </div>
+                        <input type="range" id="slider-Pc" min="1" max="300" step="0.5" value="42.48" class="w-full mb-2">
                         <div class="relative">
                             <input type="number" id="in-Pc" value="42.48" step="any" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition pr-12">
                             <span class="absolute right-3 top-1.5 text-xs font-bold text-slate-400 select-none">bar</span>
@@ -147,7 +155,11 @@
 
                     <!-- Acentric Factor (w) -->
                     <div>
-                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Acentric Factor ($\omega$)</label>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider" for="in-w">Acentric Factor ($\omega$)</label>
+                            <span class="text-sm font-bold text-ttu-purple font-mono" id="val-w">0.152</span>
+                        </div>
+                        <input type="range" id="slider-w" min="-0.2" max="1.0" step="0.001" value="0.152" class="w-full mb-2">
                         <input type="number" id="in-w" value="0.152" step="0.001" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition">
                     </div>
                 </div>
@@ -292,14 +304,23 @@
         const elements = {
             inT: document.getElementById('in-T'),
             inP: document.getElementById('in-P'),
-            sliderT: document.getElementById('slider-T'),
-            sliderP: document.getElementById('slider-P'),
             inTc: document.getElementById('in-Tc'),
             inPc: document.getElementById('in-Pc'),
             inW: document.getElementById('in-w'),
+
+            sliderT: document.getElementById('slider-T'),
+            sliderP: document.getElementById('slider-P'),
+            sliderTc: document.getElementById('slider-Tc'),
+            sliderPc: document.getElementById('slider-Pc'),
+            sliderW: document.getElementById('slider-w'),
+
             presetSelect: document.getElementById('preset-select'),
             valT: document.getElementById('val-T'),
             valP: document.getElementById('val-P'),
+            valTc: document.getElementById('val-Tc'),
+            valPc: document.getElementById('val-Pc'),
+            valW: document.getElementById('val-w'),
+
             regimeBadge: document.getElementById('regime-badge'),
             
             // Physical Parameters
@@ -349,10 +370,13 @@
             const Pc = parseFloat(elements.inPc.value);
             const w = parseFloat(elements.inW.value);
 
-            if (isNaN(T) || T <= 0 || isNaN(P) || P <= 0) return;
+            if (isNaN(T) || T <= 0 || isNaN(P) || P <= 0 || isNaN(Tc) || Tc <= 0 || isNaN(Pc) || Pc <= 0 || isNaN(w)) return;
 
             elements.valT.textContent = `${T.toFixed(1)} K`;
             elements.valP.textContent = `${P.toFixed(1)} bar`;
+            elements.valTc.textContent = `${Tc.toFixed(1)} K`;
+            elements.valPc.textContent = `${Pc.toFixed(1)} bar`;
+            elements.valW.textContent = `${w.toFixed(3)}`;
 
             const Tr = T / Tc;
             const Pr = P / Pc;
@@ -429,6 +453,18 @@
             }
         }
 
+        // Helper to link a slider with a numeric input
+        function linkInputAndSlider(inputEl, sliderEl) {
+            sliderEl.addEventListener('input', e => {
+                inputEl.value = e.target.value;
+                calculate();
+            });
+            inputEl.addEventListener('input', e => {
+                sliderEl.value = e.target.value;
+                calculate();
+            });
+        }
+
         function init() {
             // Safely initialize KaTeX auto-render on DOM content when window is ready
             if (window.renderMathInElement) {
@@ -440,27 +476,39 @@
                 });
             }
 
-            elements.sliderT.addEventListener('input', e => { elements.inT.value = e.target.value; calculate(); });
-            elements.sliderP.addEventListener('input', e => { elements.inP.value = e.target.value; calculate(); });
-            elements.inT.addEventListener('input', e => { elements.sliderT.value = e.target.value; calculate(); });
-            elements.inP.addEventListener('input', e => { elements.sliderP.value = e.target.value; calculate(); });
-            
-            [elements.inTc, elements.inPc, elements.inW].forEach(el => {
+            // Sync all 5 dual-controls
+            linkInputAndSlider(elements.inT, elements.sliderT);
+            linkInputAndSlider(elements.inP, elements.sliderP);
+            linkInputAndSlider(elements.inTc, elements.sliderTc);
+            linkInputAndSlider(elements.inPc, elements.sliderPc);
+            linkInputAndSlider(elements.inW, elements.sliderW);
+
+            // Reset preset selection back to 'custom' when any numeric input is directly modified
+            [elements.inT, elements.inP, elements.inTc, elements.inPc, elements.inW].forEach(el => {
                 el.addEventListener('input', () => {
                     elements.presetSelect.value = 'custom';
-                    calculate();
                 });
             });
-            
+
             elements.presetSelect.addEventListener('change', e => {
                 const p = substances[e.target.value];
+                if (!p) return;
+                
                 elements.inTc.value = p.Tc; 
+                elements.sliderTc.value = p.Tc;
+                
                 elements.inPc.value = p.Pc; 
+                elements.sliderPc.value = p.Pc;
+                
                 elements.inW.value = p.w;
+                elements.sliderW.value = p.w;
+                
                 elements.inT.value = p.defT; 
                 elements.sliderT.value = p.defT;
+                
                 elements.inP.value = p.defP; 
                 elements.sliderP.value = p.defP;
+                
                 calculate();
             });
 
