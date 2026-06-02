@@ -1,0 +1,935 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThermoEagle PR Z vs P Simulator</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            ttuPurple: '#4F2683',
+            ttuGold: '#FFC72C',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- React & ReactDOM CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  
+  <!-- Babel Standalone CDN (for JSX compilation in single file) -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    /* Premium slider customization */
+    input[type="range"]::-webkit-slider-thumb {
+      background: #FFC72C;
+      border: 2px solid #4F2683;
+      border-radius: 9999px;
+      cursor: pointer;
+    }
+    input[type="range"]::-moz-range-thumb {
+      background: #FFC72C;
+      border: 2px solid #4F2683;
+      border-radius: 9999px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
+  <div id="root"></div>
+
+  <!-- React code compiled dynamically via Babel -->
+  <script type="text/babel">
+    const { useState, useEffect, useMemo, useRef } = React;
+
+    // Pre-populated components data
+    const PRESETS = [
+      { id: 'co2', name: 'Carbon Dioxide (CO2)', tc: 304.13, pc: 73.75, omega: 0.225, category: 'Inorganic' },
+      { id: 'ch4', name: 'Methane (CH4)', tc: 190.56, pc: 45.99, omega: 0.011, category: 'Hydrocarbon' },
+      { id: 'h2', name: 'Hydrogen (H2)', tc: 33.15, pc: 12.96, omega: -0.216, category: 'Inorganic' },
+      { id: 'ether', name: 'Diethyl Ether', tc: 466.7, pc: 36.4, omega: 0.281, category: 'Organic' },
+      { id: 'h2o', name: 'Water (H2O)', tc: 647.1, pc: 220.64, omega: 0.344, category: 'Polar' },
+      { id: 'c2h6', name: 'Ethane (C2H6)', tc: 305.32, pc: 48.72, omega: 0.099, category: 'Hydrocarbon' },
+      { id: 'c3h8', name: 'Propane (C3H8)', tc: 369.83, pc: 42.48, omega: 0.152, category: 'Hydrocarbon' },
+      { id: 'c6h6', name: 'Benzene (C6H6)', tc: 562.05, pc: 48.9, omega: 0.210, category: 'Organic' },
+    ];
+
+    function App() {
+      // Preset Selection
+      const [selectedPresetId, setSelectedPresetId] = useState('co2');
+      
+      // Custom properties state (initialized with CO2 values)
+      const [tc, setTc] = useState(304.13);
+      const [pc, setPc] = useState(73.75);
+      const [omega, setOmega] = useState(0.225);
+      const [customName, setCustomName] = useState('My Custom Gas');
+      const [isCustom, setIsCustom] = useState(false);
+
+      // Operational states
+      const [temp, setTemp] = useState(320); // K
+      const [sysPressure, setSysPressure] = useState(70); // bar
+      const [activeTab, setActiveTab] = useState('plot'); // 'plot' | 'equations' | 'table'
+
+      // Refs for direct ChartJS integration
+      const canvasRef = useRef(null);
+      const chartInstanceRef = useRef(null);
+
+      // Sync state with selected preset
+      useEffect(() => {
+        if (selectedPresetId === 'custom') {
+          setIsCustom(true);
+        } else {
+          const preset = PRESETS.find(p => p.id === selectedPresetId);
+          if (preset) {
+            setTc(preset.tc);
+            setPc(preset.pc);
+            setOmega(preset.omega);
+            setIsCustom(false);
+          }
+        }
+      }, [selectedPresetId]);
+
+      // Safe numerical input helper
+      const handleNumberInput = (setter, val, minValue = 0.01) => {
+        const num = parseFloat(val);
+        if (!isNaN(num) && num >= minValue) {
+          setter(num);
+        } else if (val === '') {
+          setter('');
+        }
+      };
+
+      // Constants
+      const R = 8.314462618; // J / (mol * K)
+      const R_bar_L_mol_K = 0.08314462618; // bar * L / (mol * K)
+
+      // Solver for the cubic Peng-Robinson Equation of State:
+      // Z^3 - (1 - B)*Z^2 + (A - 2*B - 3*B^2)*Z - (A*B - B^2 - B^3) = 0
+      const calculatePR = (P, T, criticalTemp, criticalPress, acentric) => {
+        const Pc_bar = criticalPress;
+        const Tc_K = criticalTemp;
+
+        // Reduced properties
+        const Tr = T / Tc_K;
+        const Pr = P / Pc_bar;
+
+        // Kappa calculation based on acentric factor
+        let kappa;
+        if (acentric <= 0.49) {
+          kappa = 0.37464 + 1.54226 * acentric - 0.26992 * acentric * acentric;
+        } else {
+          kappa = 0.379642 + 1.48503 * acentric - 0.164423 * acentric * acentric + 0.016666 * Math.pow(acentric, 3);
+        }
+
+        // Alpha parameters
+        const alpha = Math.pow(1 + kappa * (1 - Math.sqrt(Tr)), 2);
+
+        // a and b parameters
+        const a = (0.45724 * R * R * Tc_K * Tc_K) / (Pc_bar * 1e5) * alpha; // in Pa * m^6 / mol^2
+        const b = (0.07780 * R * Tc_K) / (Pc_bar * 1e5); // in m^3 / mol
+
+        // Dimensionless A and B
+        const P_pa = P * 1e5;
+        const A = (a * P_pa) / (R * R * T * T);
+        const B = (b * P_pa) / (R * T);
+
+        // Coefficients of the Z cubic equation: Z^3 + c2*Z^2 + c1*Z + c0 = 0
+        const c2 = B - 1;
+        const c1 = A - 2 * B - 3 * B * B;
+        const c0 = -(A * B - B * B - B * B * B);
+
+        // Solve the cubic equation: Z^3 + c2*Z^2 + c1*Z + c0 = 0
+        const Q = (3 * c1 - c2 * c2) / 9;
+        const R_coeff = (9 * c2 * c1 - 27 * c0 - 2 * Math.pow(c2, 3)) / 54;
+        const discriminant = Q * Q * Q + R_coeff * R_coeff;
+
+        let roots = [];
+
+        if (discriminant > 0) {
+          // One real root, two complex conjugate roots
+          const s1 = Math.sign(R_coeff + Math.sqrt(discriminant)) * Math.pow(Math.abs(R_coeff + Math.sqrt(discriminant)), 1/3);
+          const s2 = Math.sign(R_coeff - Math.sqrt(discriminant)) * Math.pow(Math.abs(R_coeff - Math.sqrt(discriminant)), 1/3);
+          const singleRoot = s1 + s2 - c2 / 3;
+          roots.push(singleRoot);
+        } else {
+          // Three real roots
+          const theta = Math.acos(R_coeff / Math.sqrt(-Math.pow(Q, 3)));
+          const root1 = 2 * Math.sqrt(-Q) * Math.cos(theta / 3) - c2 / 3;
+          const root2 = 2 * Math.sqrt(-Q) * Math.cos((theta + 2 * Math.PI) / 3) - c2 / 3;
+          const root3 = 2 * Math.sqrt(-Q) * Math.cos((theta + 4 * Math.PI) / 3) - c2 / 3;
+          roots.push(root1, root2, root3);
+        }
+
+        // Filter out invalid/negative roots
+        const validRoots = roots.filter(r => r > 0).sort((x, y) => x - y);
+
+        if (validRoots.length === 0) {
+          return { zGas: 1.0, zLiq: 1.0, single: true, roots: [1.0] };
+        }
+
+        const zLiq = validRoots[0];
+        const zGas = validRoots[validRoots.length - 1];
+
+        return {
+          zGas,
+          zLiq,
+          hasTwoPhases: validRoots.length > 1,
+          roots: validRoots,
+        };
+      };
+
+      // Generate data series for P from 1 to 300 bar
+      const prData = useMemo(() => {
+        const points = [];
+        const pressureStep = 2;
+        
+        for (let p = 1; p <= 300; p += pressureStep) {
+          const result = calculatePR(p, temp, tc, pc, omega);
+          
+          const vGas = (result.zGas * R_bar_L_mol_K * temp) / p;
+          const vLiq = (result.zLiq * R_bar_L_mol_K * temp) / p;
+
+          points.push({
+            p,
+            zGas: result.zGas,
+            zLiq: result.zLiq,
+            vGas,
+            vLiq,
+            hasTwoPhases: result.hasTwoPhases,
+            isSupercritical: temp > tc,
+            isAbovePc: p > pc,
+          });
+        }
+        return points;
+      }, [temp, tc, pc, omega]);
+
+      // Calculate the current specific operating point
+      const currentOperatingPoint = useMemo(() => {
+        const result = calculatePR(sysPressure, temp, tc, pc, omega);
+        const vGas = (result.zGas * R_bar_L_mol_K * temp) / sysPressure;
+        const vLiq = (result.zLiq * R_bar_L_mol_K * temp) / sysPressure;
+        return {
+          p: sysPressure,
+          zGas: result.zGas,
+          zLiq: result.zLiq,
+          vGas,
+          vLiq,
+          hasTwoPhases: result.hasTwoPhases,
+          isSupercritical: temp > tc,
+        };
+      }, [sysPressure, temp, tc, pc, omega]);
+
+      // Determine active phase state for indicator
+      const phaseStatus = useMemo(() => {
+        if (temp > tc) {
+          return { name: 'Supercritical Fluid', color: 'text-[#4F2683] bg-purple-100 border-purple-200' };
+        }
+        return { name: 'Subcritical (Vapor/Liquid VLE Possible)', color: 'text-indigo-700 bg-indigo-50 border-indigo-200' };
+      }, [temp, tc]);
+
+      // Direct ChartJS instance controller
+      useEffect(() => {
+        if (!canvasRef.current) return;
+
+        // Initialize chart
+        const ctx = canvasRef.current.getContext('2d');
+        chartInstanceRef.current = new Chart(ctx, {
+          type: 'line',
+          data: {
+            datasets: []
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: {
+              duration: 200 // smooth transition on slider moves
+            },
+            interaction: {
+              mode: 'nearest',
+              intersect: false,
+            },
+            plugins: {
+              legend: {
+                position: 'top',
+                labels: {
+                  color: '#334155',
+                  font: { family: 'ui-sans-serif, system-ui', size: 11, weight: 'bold' }
+                }
+              },
+              tooltip: {
+                backgroundColor: '#1e1b4b',
+                titleColor: '#ffffff',
+                bodyColor: '#e2e8f0',
+                borderColor: '#4F2683',
+                borderWidth: 1,
+                callbacks: {
+                  title: (context) => `Pressure: ${context[0].parsed.x.toFixed(1)} bar`,
+                  label: (context) => `Z: ${context.parsed.y.toFixed(4)}`
+                }
+              }
+            },
+            scales: {
+              x: {
+                type: 'linear',
+                title: {
+                  display: true,
+                  text: 'Pressure (P, bar)',
+                  color: '#334155',
+                  font: { size: 13, weight: 'bold' }
+                },
+                min: 1,
+                max: 300,
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { color: '#475569' }
+              },
+              y: {
+                title: {
+                  display: true,
+                  text: 'Compressibility Factor (Z = PV/RT)',
+                  color: '#334155',
+                  font: { size: 13, weight: 'bold' }
+                },
+                grid: { color: 'rgba(0, 0, 0, 0.05)' },
+                ticks: { color: '#475569' },
+                min: 0,
+                max: 2.2,
+              }
+            }
+          }
+        });
+
+        return () => {
+          if (chartInstanceRef.current) {
+            chartInstanceRef.current.destroy();
+          }
+        };
+      }, []);
+
+      // Update Chart Data whenever calculation inputs change
+      useEffect(() => {
+        if (!chartInstanceRef.current) return;
+
+        const mainBranchData = prData.map(d => ({ x: d.p, y: d.zGas }));
+        const isSupercritical = temp > tc;
+
+        const datasets = [
+          {
+            label: isSupercritical ? 'Supercritical Fluid / Vapor' : 'Gas/Vapor Branch',
+            data: mainBranchData,
+            borderColor: '#4F2683',
+            backgroundColor: 'rgba(79, 38, 131, 0.03)',
+            borderWidth: 3,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            tension: 0.1,
+            fill: false,
+          },
+          ...(temp <= tc ? [{
+            label: 'Liquid Branch (metastable/stable)',
+            data: prData.filter(d => d.hasTwoPhases).map(d => ({ x: d.p, y: d.zLiq })),
+            borderColor: '#0d9488',
+            backgroundColor: 'rgba(13, 148, 136, 0.03)',
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 0,
+            borderDash: [5, 5],
+            tension: 0.1,
+            fill: false,
+          }] : []),
+          {
+            label: 'Ideal Gas (Z = 1.0)',
+            data: [{ x: 1, y: 1.0 }, { x: 300, y: 1.0 }],
+            borderColor: 'rgba(100, 116, 139, 0.3)',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            borderDash: [2, 4],
+            fill: false,
+          },
+          {
+            label: 'Active System (Vapor/Fluid)',
+            data: [{ x: currentOperatingPoint.p, y: currentOperatingPoint.zGas }],
+            borderColor: '#FFC72C',
+            backgroundColor: '#FFC72C',
+            pointBorderColor: '#4F2683',
+            pointBorderWidth: 2,
+            pointRadius: 8,
+            pointHoverRadius: 10,
+            showLine: false,
+            fill: false,
+          },
+          ...(temp <= tc && currentOperatingPoint.hasTwoPhases ? [{
+            label: 'Active System (Liquid)',
+            data: [{ x: currentOperatingPoint.p, y: currentOperatingPoint.zLiq }],
+            borderColor: '#FFC72C',
+            backgroundColor: '#4F2683',
+            pointBorderColor: '#FFC72C',
+            pointBorderWidth: 2,
+            pointRadius: 8,
+            pointHoverRadius: 10,
+            showLine: false,
+            fill: false,
+          }] : [])
+        ];
+
+        chartInstanceRef.current.data.datasets = datasets;
+        chartInstanceRef.current.update();
+      }, [prData, currentOperatingPoint, temp, tc]);
+
+      return (
+        <div className="flex flex-col min-h-screen">
+          {/* Top TTU Purple Header */}
+          <header className="bg-ttuPurple text-white shadow-md px-6 py-4 sticky top-0 z-10">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="bg-ttuGold p-2 rounded-xl shadow-lg shadow-black/25 flex items-center justify-center">
+                  {/* Inline Activity SVG */}
+                  <svg className="h-6 w-6 text-ttuPurple" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h1 className="text-xl font-extrabold tracking-tight flex items-center gap-2">
+                    <span>ThermoEagle</span>
+                    <span className="text-ttuGold font-normal">|</span>
+                    <span className="text-slate-100 font-semibold text-lg md:text-xl">PR Z vs P Simulator</span>
+                  </h1>
+                  <p className="text-[11px] text-purple-200">Tennessee Tech University Thermal Science Companion</p>
+                </div>
+              </div>
+
+              {/* Status Badge */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-purple-200 uppercase tracking-widest font-bold">Active Phase:</span>
+                <span className={`px-3 py-1 rounded-full text-xs font-bold border ${phaseStatus.color} shadow-sm`}>
+                  {phaseStatus.name}
+                </span>
+              </div>
+            </div>
+          </header>
+
+          {/* Main workspace layout */}
+          <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            {/* Left Hand Controls Side (5 Cols) */}
+            <section className="lg:col-span-5 flex flex-col gap-6">
+              
+              {/* Fluid characteristics box */}
+              <div className="bg-ttuPurple text-white border border-purple-900 rounded-2xl p-5 shadow-xl flex flex-col gap-5">
+                <div className="flex items-center justify-between border-b border-purple-800 pb-3">
+                  <div className="flex items-center gap-2">
+                    {/* Settings inline SVG */}
+                    <svg className="h-5 w-5 text-ttuGold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    <h2 className="font-bold text-base text-white">Fluid Characteristics</h2>
+                  </div>
+                  <span className="text-[10px] bg-purple-950 text-purple-200 font-bold px-2.5 py-0.5 rounded uppercase tracking-wider">PR-EOS Model</span>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-semibold text-purple-200 flex justify-between">
+                    <span>Select Component Preset</span>
+                    <span className="text-ttuGold text-[11px] font-medium">Custom properties available</span>
+                  </label>
+                  <select
+                    value={selectedPresetId}
+                    onChange={(e) => setSelectedPresetId(e.target.value)}
+                    className="w-full bg-purple-950 border border-purple-700 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ttuGold hover:border-purple-600 transition"
+                  >
+                    {PRESETS.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                    <option value="custom">⚙️ Custom Compound...</option>
+                  </select>
+                </div>
+
+                {/* Quick select buttons */}
+                <div className="flex flex-wrap gap-1.5">
+                  {PRESETS.slice(0, 5).map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setSelectedPresetId(p.id)}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold transition ${
+                        selectedPresetId === p.id 
+                          ? 'bg-ttuGold text-ttuPurple shadow-md' 
+                          : 'bg-purple-950/50 text-purple-200 border border-purple-800 hover:bg-purple-900'
+                      }`}
+                    >
+                      {p.id.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Critical Properties Config Block */}
+                <div className="bg-purple-950/80 p-4 rounded-xl border border-purple-900 flex flex-col gap-4">
+                  {isCustom && (
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] uppercase font-bold tracking-wider text-purple-200">Custom Compound Name</label>
+                      <input
+                        type="text"
+                        value={customName}
+                        onChange={(e) => setCustomName(e.target.value)}
+                        className="bg-purple-900 border border-purple-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-ttuGold"
+                      />
+                    </div>
+                  )}
+
+                  {/* Tc */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-bold tracking-wider text-purple-200">Critical Temp (T_c)</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="5"
+                          max="2000"
+                          disabled={!isCustom}
+                          value={tc}
+                          onChange={(e) => handleNumberInput(setTc, e.target.value, 5)}
+                          className="w-20 bg-purple-900 disabled:bg-purple-950/60 disabled:text-purple-400 border border-purple-700 disabled:border-purple-900 rounded px-1.5 py-0.5 text-right text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-ttuGold"
+                        />
+                        <span className="text-[10px] text-purple-300">K</span>
+                      </div>
+                    </div>
+                    {isCustom && (
+                      <input
+                        type="range"
+                        min="5"
+                        max="1000"
+                        step="1"
+                        value={tc || 300}
+                        onChange={(e) => setTc(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-purple-800 rounded-lg appearance-none cursor-pointer accent-ttuGold"
+                      />
+                    )}
+                  </div>
+
+                  {/* Pc */}
+                  <div className="flex flex-col gap-1.5 border-t border-purple-900 pt-3">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-bold tracking-wider text-purple-200">Critical Press (P_c)</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="1"
+                          max="500"
+                          disabled={!isCustom}
+                          value={pc}
+                          onChange={(e) => handleNumberInput(setPc, e.target.value, 1)}
+                          className="w-20 bg-purple-900 disabled:bg-purple-950/60 disabled:text-purple-400 border border-purple-700 disabled:border-purple-900 rounded px-1.5 py-0.5 text-right text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-ttuGold"
+                        />
+                        <span className="text-[10px] text-purple-300">bar</span>
+                      </div>
+                    </div>
+                    {isCustom && (
+                      <input
+                        type="range"
+                        min="1"
+                        max="300"
+                        step="1"
+                        value={pc || 50}
+                        onChange={(e) => setPc(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-purple-800 rounded-lg appearance-none cursor-pointer accent-ttuGold"
+                      />
+                    )}
+                  </div>
+
+                  {/* Omega */}
+                  <div className="flex flex-col gap-1.5 border-t border-purple-900 pt-3">
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] uppercase font-bold tracking-wider text-purple-200">Acentric Factor (ω)</label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        min="-0.5"
+                        max="1.5"
+                        disabled={!isCustom}
+                        value={omega}
+                        onChange={(e) => handleNumberInput(setOmega, e.target.value, -1.0)}
+                        className="w-20 bg-purple-900 disabled:bg-purple-950/60 disabled:text-purple-400 border border-purple-700 disabled:border-purple-900 rounded px-1.5 py-0.5 text-right text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-ttuGold"
+                      />
+                    </div>
+                    {isCustom && (
+                      <input
+                        type="range"
+                        min="-0.50"
+                        max="1.20"
+                        step="0.01"
+                        value={omega || 0}
+                        onChange={(e) => setOmega(parseFloat(e.target.value))}
+                        className="w-full h-1 bg-purple-800 rounded-lg appearance-none cursor-pointer accent-ttuGold"
+                      />
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Operating Conditions Controls */}
+              <div className="bg-ttuPurple text-white border border-purple-950 rounded-2xl p-5 shadow-xl flex flex-col gap-5">
+                <div className="flex items-center justify-between border-b border-purple-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    {/* Sliders inline SVG */}
+                    <svg className="h-5 w-5 text-ttuGold" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                    <h2 className="font-bold text-base text-white">Operating Conditions</h2>
+                  </div>
+                </div>
+
+                {/* Operating Temperature */}
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-purple-200">System Temp (T)</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="10"
+                        max="2000"
+                        value={temp}
+                        onChange={(e) => handleNumberInput(setTemp, e.target.value, 10)}
+                        className="w-16 bg-purple-950 border border-purple-700 rounded px-1.5 py-0.5 text-center text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#FFC72C]"
+                      />
+                      <span className="text-xs text-purple-300">K</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="1000"
+                    step="1"
+                    value={temp}
+                    onChange={(e) => setTemp(parseInt(e.target.value))}
+                    className="w-full h-2 bg-purple-850 rounded-lg appearance-none cursor-pointer accent-ttuGold"
+                  />
+                  {/* Temp Quick Buttons */}
+                  <div className="grid grid-cols-4 gap-2 pt-1">
+                    <button onClick={() => setTemp(Math.max(50, Math.round(tc * 0.8)))} className="px-2 py-1 bg-purple-950/60 text-purple-200 text-[10px] rounded hover:bg-purple-900 transition font-bold">
+                      0.8 T_c
+                    </button>
+                    <button onClick={() => setTemp(Math.round(tc))} className="px-2 py-1 bg-ttuGold text-ttuPurple text-[10px] rounded hover:bg-amber-400 transition font-bold">
+                      1.0 T_c
+                    </button>
+                    <button onClick={() => setTemp(Math.min(1000, Math.round(tc * 1.2)))} className="px-2 py-1 bg-purple-950/60 text-purple-200 text-[10px] rounded hover:bg-purple-900 transition font-bold">
+                      1.2 T_c
+                    </button>
+                    <button onClick={() => setTemp(298)} className="px-2 py-1 bg-purple-950/60 text-purple-200 text-[10px] rounded hover:bg-purple-900 transition font-bold">
+                      298 K
+                    </button>
+                  </div>
+                </div>
+
+                {/* Operating Pressure */}
+                <div className="flex flex-col gap-1.5 border-t border-purple-800/60 pt-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-purple-200">System Pressure (P)</span>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="number"
+                        min="1"
+                        max="300"
+                        value={sysPressure}
+                        onChange={(e) => handleNumberInput(setSysPressure, e.target.value, 1)}
+                        className="w-16 bg-purple-950 border border-purple-700 rounded px-1.5 py-0.5 text-center text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#FFC72C]"
+                      />
+                      <span className="text-xs text-purple-300">bar</span>
+                    </div>
+                  </div>
+                  <input
+                    type="range"
+                    min="1"
+                    max="300"
+                    step="1"
+                    value={sysPressure}
+                    onChange={(e) => setSysPressure(parseInt(e.target.value))}
+                    className="w-full h-2 bg-purple-850 rounded-lg appearance-none cursor-pointer accent-ttuGold"
+                  />
+                  {/* Pressure Quick Buttons */}
+                  <div className="grid grid-cols-4 gap-2 pt-1">
+                    <button onClick={() => setSysPressure(10)} className="px-2 py-1 bg-purple-950/60 text-purple-200 text-[10px] rounded hover:bg-purple-900 transition font-bold">
+                      10 bar
+                    </button>
+                    <button onClick={() => setSysPressure(Math.min(300, Math.round(pc)))} className="px-2 py-1 bg-ttuGold text-ttuPurple text-[10px] rounded hover:bg-amber-400 transition font-bold">
+                      1.0 P_c
+                    </button>
+                    <button onClick={() => setSysPressure(150)} className="px-2 py-1 bg-purple-950/60 text-purple-200 text-[10px] rounded hover:bg-purple-900 transition font-bold">
+                      150 bar
+                    </button>
+                    <button onClick={() => setSysPressure(300)} className="px-2 py-1 bg-purple-950/60 text-purple-200 text-[10px] rounded hover:bg-purple-900 transition font-bold">
+                      300 bar
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Derived output metrics */}
+              <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-lg flex flex-col gap-3.5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-ttuPurple flex items-center gap-1.5">
+                  <span className="text-purple-600">⚡</span>
+                  <span>Calculated State Output</span>
+                </h3>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="text-[10px] text-slate-500 uppercase font-semibold">Reduced Temp (T_r)</div>
+                    <div className="text-sm font-bold font-mono text-slate-800">{(temp / tc).toFixed(4)}</div>
+                  </div>
+
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="text-[10px] text-slate-500 uppercase font-semibold">Reduced Press (P_r)</div>
+                    <div className="text-sm font-bold font-mono text-slate-800">{(sysPressure / pc).toFixed(4)}</div>
+                  </div>
+
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="text-[10px] text-ttuPurple uppercase font-semibold">Z (Vapor Root)</div>
+                    <div className="text-sm font-bold font-mono text-ttuPurple">{currentOperatingPoint.zGas.toFixed(5)}</div>
+                  </div>
+
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="text-[10px] text-teal-600 uppercase font-semibold">Z (Liquid Root)</div>
+                    <div className="text-sm font-bold font-mono text-teal-600">
+                      {currentOperatingPoint.hasTwoPhases ? currentOperatingPoint.zLiq.toFixed(5) : 'Single Root'}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-100 col-span-2">
+                    <div className="text-[10px] text-slate-500 uppercase font-semibold">Molar Volume (Vapor)</div>
+                    <div className="text-sm font-bold font-mono text-slate-800">
+                      {currentOperatingPoint.vGas.toFixed(5)} <span className="text-[9px] text-slate-500">L/mol</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Right Hand Graphic Dashboard Work Area (7 Cols) */}
+            <section className="lg:col-span-7 flex flex-col gap-6">
+              
+              {/* Tab Container Card */}
+              <div className="bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden flex flex-col h-full">
+                
+                {/* Custom Tab selectors */}
+                <div className="flex bg-slate-50 border-b border-slate-200 p-2 gap-1">
+                  <button
+                    onClick={() => setActiveTab('plot')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
+                      activeTab === 'plot' 
+                        ? 'bg-ttuPurple text-white shadow' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    <span>📈 Diagram</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => setActiveTab('equations')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
+                      activeTab === 'equations' 
+                        ? 'bg-ttuPurple text-white shadow' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    <span>📖 Equations</span>
+                  </button>
+
+                  <button
+                    onClick={() => setActiveTab('table')}
+                    className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold rounded-lg transition-all ${
+                      activeTab === 'table' 
+                        ? 'bg-ttuPurple text-white shadow' 
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                    }`}
+                  >
+                    <span>🧪 Data Grid</span>
+                  </button>
+                </div>
+
+                {/* TAB 1: PLOT AREA */}
+                {activeTab === 'plot' && (
+                  <div className="p-5 flex flex-col gap-4 flex-1 justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-800 flex justify-between items-center">
+                        <span>Compressibility Factor (Z) vs. Pressure (P)</span>
+                        <span className="text-[11px] text-slate-500 font-normal">
+                          Working Fluid: <strong className="text-ttuPurple">{isCustom ? customName : PRESETS.find(p => p.id === selectedPresetId)?.name}</strong>
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-slate-500 mt-1">
+                        Deviations below Z = 1.0 show attractive molecular forces dominating. Values above 1.0 show finite size volumetric exclusion repulsions. 
+                        The dynamic yellow dot traces your active operational pressure state.
+                      </p>
+                    </div>
+
+                    {/* Chart.js direct canvas container */}
+                    <div className="relative flex-1 min-h-[380px] bg-slate-50 rounded-xl border border-slate-200 p-2 flex items-center justify-center">
+                      <canvas ref={canvasRef}></canvas>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600">
+                      <div>
+                        <h4 className="font-bold text-purple-900 mb-1 flex items-center gap-1">
+                          <span>🔥 Attractive Domain</span>
+                        </h4>
+                        <p className="text-slate-500 text-[10px] leading-relaxed">
+                          At moderate pressures, molecules reside closer than calculated by ideal models, resulting in volumetric compression gaps (Z &lt; 1).
+                        </p>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-teal-800 mb-1 flex items-center gap-1">
+                          <span>💧 Two-Phase Root Splitting</span>
+                        </h4>
+                        <p className="text-slate-500 text-[10px] leading-relaxed">
+                          Beneath critical temperatures (Tr &lt; 1.0), the Peng-Robinson cubic equation of state generates distinct liquid (lower Z) and vapor (higher Z) solutions.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 2: MATHEMATICAL EXPOSURE */}
+                {activeTab === 'equations' && (
+                  <div className="p-6 overflow-y-auto max-h-[500px] space-y-6 text-slate-700">
+                    <div>
+                      <h3 className="text-base font-bold text-[#4F2683] border-b border-slate-200 pb-2">
+                        Peng-Robinson Equation of State (1976)
+                      </h3>
+                      <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                        Optimized for hydrocarbons, polar fluids, and subcritical phase transitions, the classic cubic state formula computes fluid parameters through precise volumetric adjustments.
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h4 className="text-xs font-bold text-purple-800 uppercase tracking-wide mb-2">1. Pressure Representation</h4>
+                        <div className="text-xs font-mono py-2 text-purple-950 bg-white p-2.5 rounded border border-slate-200">
+                          P = R T / (V - b) - a(T) / [V(V + b) + b(V - b)]
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h4 className="text-xs font-bold text-purple-800 uppercase tracking-wide mb-2">2. Cubic Dimensionless Z Form</h4>
+                        <p className="text-xs text-slate-500 mb-2">
+                          Rewriting in terms of compressibility Z = PV/RT returns:
+                        </p>
+                        <div className="text-xs font-mono py-2 text-purple-950 bg-white p-2.5 rounded border border-slate-200">
+                          Z³ - (1 - B)Z² + (A - 2B - 3B²)Z - (AB - B² - B³) = 0
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <h4 className="text-xs font-bold text-purple-800 uppercase tracking-wide mb-2">3. Component Coefficient Parameters</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mt-2">
+                          <div className="space-y-1 bg-white p-2.5 rounded border border-slate-200">
+                            <p className="font-semibold text-slate-800">Dimensionless scales:</p>
+                            <p className="font-mono text-[11px] text-purple-950">A = a·P / (R²·T²)</p>
+                            <p className="font-mono text-[11px] text-purple-950">B = b·P / (R·T)</p>
+                          </div>
+                          <div className="space-y-1 bg-white p-2.5 rounded border border-slate-200">
+                            <p className="font-semibold text-slate-800">Critical constants parameters:</p>
+                            <p className="font-mono text-[11px] text-purple-950">a(T) = α · 0.45724·R²·T_c² / P_c</p>
+                            <p className="font-mono text-[11px] text-purple-950">b = 0.07780·R·T_c / P_c</p>
+                          </div>
+                        </div>
+                        
+                        <div className="text-xs text-slate-500 space-y-1 mt-4">
+                          <p className="font-semibold text-slate-800">Acentric alpha (α) correction factor:</p>
+                          <p className="font-mono text-[11px] bg-white p-2.5 rounded border border-slate-200 text-purple-950">
+                            α = [1 + κ · (1 - √(T/T_c))]²
+                          </p>
+                          <p className="font-mono text-[11px] bg-white p-2.5 rounded border border-slate-200 mt-1 text-purple-950">
+                            Where κ = 0.37464 + 1.54226·ω - 0.26992·ω²
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TAB 3: DATA GRID */}
+                {activeTab === 'table' && (
+                  <div className="p-5 flex flex-col flex-1">
+                    <div className="flex justify-between items-center mb-3">
+                      <h3 className="text-xs font-bold uppercase text-slate-600 tracking-wider">Calculated PVT Data Points</h3>
+                      <span className="text-[10px] text-slate-500">Showing representative intervals</span>
+                    </div>
+
+                    <div className="flex-1 overflow-auto rounded-xl border border-slate-200 bg-white">
+                      <table className="w-full text-xs text-left text-slate-700">
+                        <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider text-[10px] border-b border-slate-200 sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3">P (bar)</th>
+                            <th className="px-4 py-3">Z (Vapor)</th>
+                            <th className="px-4 py-3">Z (Liquid)</th>
+                            <th className="px-4 py-3">V Vol (L/mol)</th>
+                            <th className="px-4 py-3">Liq Vol (L/mol)</th>
+                            <th className="px-4 py-3">Phase Type</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {prData.filter((_, i) => i % 10 === 0 || i === prData.length - 1).map((row, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50 transition">
+                              <td className="px-4 py-2 font-mono font-bold text-slate-900">{row.p}</td>
+                              <td className="px-4 py-2 font-mono text-purple-700 font-medium">{row.zGas.toFixed(5)}</td>
+                              <td className="px-4 py-2 font-mono text-teal-600 font-medium">
+                                {row.hasTwoPhases ? row.zLiq.toFixed(5) : '—'}
+                              </td>
+                              <td className="px-4 py-2 font-mono text-slate-600">{row.vGas.toFixed(5)}</td>
+                              <td className="px-4 py-2 font-mono text-slate-600">
+                                {row.hasTwoPhases ? row.vLiq.toFixed(5) : '—'}
+                              </td>
+                              <td className="px-4 py-2">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${
+                                  row.isSupercritical 
+                                    ? 'bg-purple-50 text-purple-700 border border-purple-200' 
+                                    : row.hasTwoPhases 
+                                      ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' 
+                                      : 'bg-slate-100 text-slate-600'
+                                }`}>
+                                  {row.isSupercritical ? 'Supercritical' : (row.hasTwoPhases ? 'VLE Roots' : 'Single Phase')}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </section>
+          </main>
+
+          {/* Footer block */}
+          <footer className="border-t border-slate-200 bg-white text-slate-500 py-4 px-6 text-xs mt-auto">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
+              <p>© ThermoEagle PR EoS Visualizer. Prepared for TTU engineering fluid property analysis.</p>
+              <div className="flex gap-4">
+                <span className="text-slate-500 font-semibold">R = 8.314 J/mol·K</span>
+                <span className="text-slate-300">|</span>
+                <span className="text-slate-500 font-semibold">Peng-Robinson (1976)</span>
+              </div>
+            </div>
+          </footer>
+        </div>
+      );
+    }
+
+    // Render App inside Babel root element
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
