@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ThermoEagle - Ideal Gas Process Calcs</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React and ReactDOM CDNs (UMD Production) -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel Standalone CDN for in-browser JSX compilation -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <style>
+    /* Prevent raw HTML flash before React mounts */
+    [v-cloak] { display: none; }
+    /* Custom animation for smooth UI transitions */
+    .animate-fade-in {
+      animation: fadeIn 0.3s ease-out forwards;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen">
+  
+  <div id="root">
+    <!-- Fallback loading state while React compiles -->
+    <div class="flex flex-col items-center justify-center min-h-screen p-4">
+      <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-[#4F2683]"></div>
+      <p class="text-slate-600 mt-4 font-semibold text-sm">Loading ThermoEagle...</p>
+    </div>
+  </div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- Clean Inline SVG Icons to prevent cross-origin network errors inside LMS iframes ---
+    const Settings = ({ className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.1a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </svg>
+    );
+
+    const RefreshCw = ({ className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+        <path d="M3 3v5h5"/>
+        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+        <path d="M16 16h5v5"/>
+      </svg>
+    );
+
+    const CheckCircle2 = ({ className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/>
+        <path d="m9 12 2 2 4-4"/>
+      </svg>
+    );
+
+    const XCircle = ({ className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <circle cx="12" cy="12" r="10"/>
+        <path d="m15 9-6 6"/>
+        <path d="m9 9 6 6"/>
+      </svg>
+    );
+
+    const Lightbulb = ({ className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A5 5 0 0 0 8 8c0 1 .3 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/>
+        <path d="M9 18h6"/>
+        <path d="M10 22h4"/>
+      </svg>
+    );
+
+    const Info = ({ className }) => (
+      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 16v-4"/>
+        <path d="M12 8h.01"/>
+      </svg>
+    );
+
+    // --- Constants & Utilities ---
+    const R_J = 8.31446; // J/(mol K)
+    const R_PV = 83.1446; // (cm^3 bar) / (mol K)
+
+    const UNITS = {
+      T: { K: { toBase: (v) => v, fromBase: (v) => v }, C: { toBase: (v) => v + 273.15, fromBase: (v) => v - 273.15 } },
+      P: { bar: { toBase: (v) => v, fromBase: (v) => v }, atm: { toBase: (v) => v * 1.01325, fromBase: (v) => v / 1.01325 }, MPa: { toBase: (v) => v * 10, fromBase: (v) => v / 10 } },
+      V: { cm3: { toBase: (v) => v, fromBase: (v) => v, label: 'cm³/mol' }, L: { toBase: (v) => v * 1000, fromBase: (v) => v / 1000, label: 'L/mol' } },
+      E: { J: { toBase: (v) => v, fromBase: (v) => v, label: 'J/mol' }, kJ: { toBase: (v) => v * 1000, fromBase: (v) => v / 1000, label: 'kJ/mol' } },
+      S: { J: { toBase: (v) => v, fromBase: (v) => v, label: 'J/(mol·K)' } }
+    };
+
+    // --- Physics Engine ---
+    const getHeatCapacities = (gasType) => {
+      if (gasType === 'monatomic') return { cv: 1.5 * R_J, cp: 2.5 * R_J, gamma: 5 / 3 };
+      return { cv: 2.5 * R_J, cp: 3.5 * R_J, gamma: 7 / 5 }; // diatomic
+    };
+
+    const calculateStateFromPT = (P, T) => ({ P, T, V: (R_PV * T) / P });
+    const calculateStateFromPV = (P, V) => ({ P, V, T: (P * V) / R_PV });
+
+    const calculateProcess = (state1, type, target, gasType) => {
+      const { cv, cp, gamma } = getHeatCapacities(gasType);
+      let state2, W, Q, dU, dH, dS;
+
+      switch (type) {
+        case 'isothermal':
+          state2 = calculateStateFromPT(target, state1.T);
+          dU = 0;
+          dH = 0;
+          W = -R_J * state1.T * Math.log(state2.V / state1.V);
+          Q = -W;
+          dS = R_J * Math.log(state2.V / state1.V);
+          break;
+        case 'isobaric':
+          state2 = calculateStateFromPT(state1.P, target);
+          W = -state1.P * (state2.V - state1.V) * 0.1; 
+          Q = cp * (state2.T - state1.T);
+          dU = cv * (state2.T - state1.T);
+          dH = Q;
+          dS = cp * Math.log(state2.T / state1.T);
+          break;
+        case 'isochoric':
+          state2 = calculateStateFromPV(target, state1.V);
+          W = 0;
+          Q = cv * (state2.T - state1.T);
+          dU = Q;
+          dH = cp * (state2.T - state1.T);
+          dS = cv * Math.log(state2.T / state1.T);
+          break;
+        case 'adiabatic':
+          const P2 = target;
+          const T2 = state1.T * Math.pow(P2 / state1.P, (gamma - 1) / gamma);
+          state2 = calculateStateFromPT(P2, T2);
+          Q = 0;
+          dU = cv * (state2.T - state1.T);
+          W = dU;
+          dH = cp * (state2.T - state1.T);
+          dS = 0;
+          break;
+        default:
+          break;
+      }
+      const dV = state2.V - state1.V;
+      return { state2, path: { W, Q, dU, dH, dS, dV } };
+    };
+
+    function App() {
+      const [config, setConfig] = useState({
+        gasType: 'diatomic',
+        steps: 1,
+        units: { T: 'K', P: 'bar', V: 'cm3', E: 'J', S: 'J' },
+        calcTargets: { Q: true, W: true, dV: true, dU: true, dH: true, dS: true }
+      });
+
+      const [problem, setProblem] = useState(null);
+      const [userInputs, setUserInputs] = useState({});
+      const [results, setResults] = useState({});
+      const [activeHints, setActiveHints] = useState({});
+      const [showSettings, setShowSettings] = useState(false);
+
+      const targetKeys = ['Q', 'W', 'dV', 'dU', 'dH', 'dS'];
+      const allTargetsChecked = targetKeys.every(k => config.calcTargets[k]);
+
+      const generateProblem = () => {
+        const T1 = Math.floor(Math.random() * 300) + 300; 
+        const P1 = Math.floor(Math.random() * 90) / 10 + 1; 
+        const state1 = calculateStateFromPT(P1, T1);
+
+        const processTypes = ['isothermal', 'isobaric', 'isochoric', 'adiabatic'];
+        
+        const p1Type = processTypes[Math.floor(Math.random() * processTypes.length)];
+        let target1;
+        if (p1Type === 'isobaric') {
+          target1 = T1 + (Math.random() > 0.5 ? 100 : -100); 
+        } else {
+          do {
+            target1 = Math.floor(Math.random() * 90) / 10 + 1; 
+          } while (Math.abs(target1 - P1) < 1.5);
+        }
+        
+        const { state2, path: path1 } = calculateProcess(state1, p1Type, target1, config.gasType);
+
+        let p2Type = null, target2 = null, state3 = null, path2 = null;
+
+        if (config.steps === 2) {
+          do {
+            p2Type = processTypes[Math.floor(Math.random() * processTypes.length)];
+          } while (p2Type === p1Type); 
+
+          if (p2Type === 'isobaric') {
+            target2 = state2.T + (Math.random() > 0.5 ? 100 : -100);
+          } else {
+            do {
+              target2 = Math.floor(Math.random() * 90) / 10 + 1;
+            } while (Math.abs(target2 - state2.P) < 1.5);
+          }
+          const step2Res = calculateProcess(state2, p2Type, target2, config.gasType);
+          state3 = step2Res.state2;
+          path2 = step2Res.path;
+        }
+
+        setProblem({
+          state1,
+          step1: { type: p1Type, target: target1, state2, path1 },
+          step2: config.steps === 2 ? { type: p2Type, target: target2, state3, path2 } : null
+        });
+        
+        setUserInputs({});
+        setResults({});
+        setActiveHints({});
+      };
+
+      useEffect(() => {
+        generateProblem();
+      }, [config.gasType, config.steps]); 
+
+      const handleInputChange = (step, key, value) => {
+        setUserInputs(prev => ({
+          ...prev,
+          [`${step}_${key}`]: value
+        }));
+      };
+
+      const toggleHint = (step, key) => {
+        setActiveHints(prev => ({
+          ...prev,
+          [`${step}_${key}`]: !prev[`${step}_${key}`]
+        }));
+      };
+
+      const handleAllTargetsToggle = () => {
+        const nextState = !allTargetsChecked;
+        const newTargets = {};
+        targetKeys.forEach(k => {
+          newTargets[k] = nextState;
+        });
+        setConfig(prev => ({
+          ...prev,
+          calcTargets: newTargets
+        }));
+      };
+
+      const handleSingleTargetToggle = (key) => {
+        setConfig(prev => ({
+          ...prev,
+          calcTargets: {
+            ...prev.calcTargets,
+            [key]: !prev.calcTargets[key]
+          }
+        }));
+      };
+
+      const checkAnswers = () => {
+        const newResults = {};
+        const checkValue = (stepKey, varName, truthValue, unitCategory) => {
+          const isPathVariable = targetKeys.includes(varName);
+          if (isPathVariable && !config.calcTargets[varName]) {
+            return;
+          }
+
+          const userVal = parseFloat(userInputs[`${stepKey}_${varName}`]);
+          if (isNaN(userVal)) {
+            newResults[`${stepKey}_${varName}`] = 'missing';
+            return;
+          }
+          
+          const userBaseVal = UNITS[unitCategory][config.units[unitCategory]].toBase(userVal);
+          
+          const margin = 0.02;
+          let isCorrect = false;
+          if (Math.abs(truthValue) < 1e-5) {
+            isCorrect = Math.abs(userBaseVal) < 0.1; 
+          } else {
+            isCorrect = Math.abs((userBaseVal - truthValue) / truthValue) <= margin;
+          }
+          
+          newResults[`${stepKey}_${varName}`] = isCorrect ? 'correct' : 'incorrect';
+        };
+
+        if (problem.step1) {
+          checkValue('step1', 'T2', problem.step1.state2.T, 'T');
+          checkValue('step1', 'P2', problem.step1.state2.P, 'P');
+          checkValue('step1', 'V2', problem.step1.state2.V, 'V');
+          checkValue('step1', 'W', problem.step1.path1.W, 'E');
+          checkValue('step1', 'Q', problem.step1.path1.Q, 'E');
+          checkValue('step1', 'dU', problem.step1.path1.dU, 'E');
+          checkValue('step1', 'dH', problem.step1.path1.dH, 'E');
+          checkValue('step1', 'dS', problem.step1.path1.dS, 'S');
+          checkValue('step1', 'dV', problem.step1.path1.dV, 'V');
+        }
+
+        if (problem.step2) {
+          checkValue('step2', 'T3', problem.step2.state3.T, 'T');
+          checkValue('step2', 'P3', problem.step2.state3.P, 'P');
+          checkValue('step2', 'V3', problem.step2.state3.V, 'V');
+          checkValue('step2', 'W', problem.step2.path2.W, 'E');
+          checkValue('step2', 'Q', problem.step2.path2.Q, 'E');
+          checkValue('step2', 'dU', problem.step2.path2.dU, 'E');
+          checkValue('step2', 'dH', problem.step2.path2.dH, 'E');
+          checkValue('step2', 'dS', problem.step2.path2.dS, 'S');
+          checkValue('step2', 'dV', problem.step2.path2.dV, 'V');
+        }
+
+        setResults(newResults);
+      };
+
+      const getHintText = (processType, variable, gasType) => {
+        const isMonatomic = gasType === 'monatomic';
+        const cvText = isMonatomic ? '1.5R' : '2.5R';
+        const cpText = isMonatomic ? '2.5R' : '3.5R';
+        const gammaText = isMonatomic ? '5/3' : '7/5';
+
+        const hints = {
+          isothermal: {
+            T2: "T2 = T1 (Isothermal means constant temperature).",
+            P2: "Use Ideal Gas Law: P1*V1 = P2*V2",
+            V2: "V2 = (P1*V1) / P2",
+            dV: "ΔV = V2 - V1. Find V2 first using P1*V1 = P2*V2.",
+            dU: "dU = Cv * ΔT. If ΔT is 0, what is dU?",
+            dH: "dH = Cp * ΔT. If ΔT is 0, what is dH?",
+            W: "W = -∫P dV = -RT * ln(V2/V1) = -RT * ln(P1/P2)",
+            Q: "1st Law: dU = Q + W. If dU=0, Q = -W.",
+            dS: "dS = R * ln(V2/V1) = -R * ln(P2/P1) for an ideal gas at constant T."
+          },
+          isobaric: {
+            P2: "P2 = P1 (Isobaric means constant pressure).",
+            T2: "Use Charles's Law: V1/T1 = V2/T2",
+            V2: "V2 = V1 * (T2/T1)",
+            dV: "ΔV = V2 - V1. Use Charles's Law to find V2 first.",
+            W: "W = -P * ΔV = -R * ΔT. (Don't forget conversion factors for pressure/volume!)",
+            Q: `Q = dH = Cp * ΔT. For ${gasType}, Cp = ${cpText}.`,
+            dU: `dU = Cv * ΔT. For ${gasType}, Cv = ${cvText}.`,
+            dH: `dH = Cp * ΔT. For ${gasType}, Cp = ${cpText}.`,
+            dS: `dS = Cp * ln(T2/T1).`
+          },
+          isochoric: {
+            V2: "V2 = V1 (Isochoric means constant volume).",
+            T2: "Use Gay-Lussac's Law: P1/T1 = P2/T2",
+            P2: "P2 = P1 * (T2/T1)",
+            dV: "ΔV = 0 (Isochoric means constant volume).",
+            W: "W = -∫P dV. If ΔV is 0, what is W?",
+            Q: `Q = dU = Cv * ΔT. For ${gasType}, Cv = ${cvText}.`,
+            dU: `Q = dU = Cv * ΔT.`,
+            dH: `dH = Cp * ΔT. For ${gasType}, Cp = ${cpText}.`,
+            dS: `dS = Cv * ln(T2/T1).`
+          },
+          adiabatic: {
+            Q: "Q = 0 (Adiabatic means no heat transfer).",
+            dU: `dU = Cv * ΔT. For ${gasType}, Cv = ${cvText}.`,
+            W: "1st Law: dU = Q + W. If Q=0, W = dU.",
+            dH: `dH = Cp * ΔT. For ${gasType}, Cp = ${cpText}.`,
+            dS: "For a reversible adiabatic process, dS = 0.",
+            T2: `Use T2 = T1 * (P2/P1)^((γ-1)/γ). γ = ${gammaText}.`,
+            P2: `Use P2 = P1 * (T2/T1)^(γ/(γ-1)). γ = ${gammaText}.`,
+            V2: `Use V2 = V1 * (P1/P2)^(1/γ) or Ideal Gas Law if T2 & P2 are known.`,
+            dV: `ΔV = V2 - V1. Find V2 using P1*V1^γ = P2*V2^γ first.`
+          }
+        };
+        return hints[processType]?.[variable] || "Use the Ideal Gas Law (PV = RT) or 1st Law (dU = Q + W).";
+      };
+
+      const renderInputBox = (stepKey, varName, label, unitCategory, processType) => {
+        const status = results[`${stepKey}_${varName}`];
+        const unitLabel = UNITS[unitCategory][config.units[unitCategory]].label || config.units[unitCategory];
+        const showHint = activeHints[`${stepKey}_${varName}`];
+
+        return (
+          <div className="flex flex-col mb-4 animate-fade-in">
+            <label className="text-sm font-semibold text-slate-700 mb-1 flex justify-between items-center">
+              <span>{label}</span>
+              <span className="text-xs text-slate-500 font-mono">{unitLabel}</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                step="any"
+                className={`flex-1 p-2 border rounded-md outline-none focus:ring-2 focus:ring-purple-500 transition-colors font-mono
+                  ${status === 'correct' ? 'border-green-500 bg-green-50' : ''}
+                  ${status === 'incorrect' ? 'border-red-500 bg-red-50' : ''}
+                  ${status === 'missing' ? 'border-yellow-400 bg-yellow-50' : 'border-slate-300'}
+                `}
+                value={userInputs[`${stepKey}_${varName}`] || ''}
+                onChange={(e) => handleInputChange(stepKey, varName, e.target.value)}
+                placeholder="0.00"
+              />
+              {status === 'correct' && <CheckCircle2 className="w-5 h-5 text-green-600" />}
+              {status === 'incorrect' && (
+                <button 
+                  onClick={() => toggleHint(stepKey, varName)}
+                  className="p-1 rounded-full hover:bg-red-100 text-red-500 transition-colors"
+                  title="Show hint"
+                >
+                  <Lightbulb className={`w-5 h-5 ${showHint ? 'fill-current' : ''}`} />
+                </button>
+              )}
+              {status === 'missing' && <XCircle className="w-5 h-5 text-yellow-500" />}
+            </div>
+            {showHint && status === 'incorrect' && (
+              <div className="mt-2 p-2 bg-purple-50 border border-purple-200 rounded text-sm text-purple-900 animate-fade-in flex items-start gap-2">
+                <Info className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <p>{getHintText(processType, varName, config.gasType)}</p>
+              </div>
+            )}
+          </div>
+        );
+      };
+
+      if (!problem) return <div className="flex justify-center items-center h-screen">Loading...</div>;
+
+      const displayState1 = {
+        T: UNITS.T[config.units.T].fromBase(problem.state1.T).toFixed(2),
+        P: UNITS.P[config.units.P].fromBase(problem.state1.P).toFixed(2),
+        V: UNITS.V[config.units.V].fromBase(problem.state1.V).toFixed(2)
+      };
+
+      const getTargetDisplay = (step) => {
+        if (step.type === 'isobaric') {
+          return `${UNITS.T[config.units.T].fromBase(step.target).toFixed(2)} ${config.units.T}`;
+        }
+        return `${UNITS.P[config.units.P].fromBase(step.target).toFixed(2)} ${config.units.P}`;
+      };
+
+      return (
+        <div className="min-h-screen bg-slate-50 text-slate-800 font-sans p-2 sm:p-4 md:p-8">
+          <div className="max-w-5xl mx-auto space-y-6">
+            
+            {/* Header & Controls */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              <div className="bg-[#4F2683] p-4 sm:p-6 text-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                  <h1 className="text-xl sm:text-2xl font-bold">ThermoEagle</h1>
+                  <p className="text-purple-200 mt-1 text-sm">Ideal Gas Process Calcs</p>
+                </div>
+                <div className="flex gap-2 sm:gap-3 w-full sm:w-auto">
+                  <button 
+                    onClick={() => setShowSettings(!showSettings)}
+                    className="flex-1 sm:flex-initial py-2 px-3 sm:p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base font-semibold"
+                  >
+                    <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>Settings</span>
+                  </button>
+                  <button 
+                    onClick={generateProblem}
+                    className="flex-1 sm:flex-initial py-2 px-3 sm:p-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base font-semibold"
+                  >
+                    <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span>New Problem</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Settings Panel */}
+              {showSettings && (
+                <div className="p-4 sm:p-6 bg-slate-100 border-b border-slate-200 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 animate-fade-in">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Gas Type</label>
+                    <select 
+                      className="w-full p-2 rounded border border-slate-300 focus:ring-2 focus:ring-purple-500 bg-white"
+                      value={config.gasType}
+                      onChange={(e) => setConfig({...config, gasType: e.target.value})}
+                    >
+                      <option value="monatomic">Monatomic (He, Ne, Ar)</option>
+                      <option value="diatomic">Diatomic (N2, O2, H2)</option>
+                    </select>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {config.gasType === 'monatomic' ? 'Cv = 1.5R, Cp = 2.5R' : 'Cv = 2.5R, Cp = 3.5R'}
+                    </p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Process Complexity</label>
+                    <select 
+                      className="w-full p-2 rounded border border-slate-300 focus:ring-2 focus:ring-purple-500 bg-white"
+                      value={config.steps}
+                      onChange={(e) => setConfig({...config, steps: parseInt(e.target.value)})}
+                    >
+                      <option value={1}>Single-Step Process</option>
+                      <option value={2}>Two-Step Process</option>
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2 md:col-span-1">
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Preferred Units</label>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <select 
+                        className="p-1.5 rounded border border-slate-300 bg-white"
+                        value={config.units.T}
+                        onChange={(e) => setConfig({...config, units: {...config.units, T: e.target.value}})}
+                      >
+                        <option value="K">Kelvin (K)</option>
+                        <option value="C">Celsius (°C)</option>
+                      </select>
+                      <select 
+                        className="p-1.5 rounded border border-slate-300 bg-white"
+                        value={config.units.P}
+                        onChange={(e) => setConfig({...config, units: {...config.units, P: e.target.value}})}
+                      >
+                        <option value="bar">bar</option>
+                        <option value="atm">atm</option>
+                        <option value="MPa">MPa</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2 md:col-span-3 pt-4 border-t border-slate-200">
+                    <label className="block text-sm font-semibold text-slate-700 mb-3">Target Path Variables to Calculate</label>
+                    <div className="flex flex-wrap gap-3 sm:gap-4 items-center">
+                      <label className="flex items-center gap-2 text-sm font-bold cursor-pointer text-purple-900 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-slate-200 shadow-xs">
+                        <input 
+                          type="checkbox" 
+                          checked={allTargetsChecked}
+                          onChange={handleAllTargetsToggle}
+                          className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500"
+                        />
+                        All Variables
+                      </label>
+                      
+                      <div className="h-4 w-px bg-slate-300 mx-2 hidden md:block"></div>
+
+                      {[
+                        { id: 'Q', label: 'Heat (Q)' },
+                        { id: 'W', label: 'Work (W)' },
+                        { id: 'dV', label: 'ΔV' },
+                        { id: 'dU', label: 'ΔU' },
+                        { id: 'dH', label: 'ΔH' },
+                        { id: 'dS', label: 'ΔS' }
+                      ].map(target => (
+                        <label key={target.id} className="flex items-center gap-2 text-sm cursor-pointer hover:text-purple-700 bg-white sm:bg-transparent p-2 sm:p-0 rounded border sm:border-0 border-slate-200 shadow-xs">
+                          <input 
+                            type="checkbox" 
+                            checked={config.calcTargets[target.id]}
+                            onChange={() => handleSingleTargetToggle(target.id)}
+                            className="w-4 h-4 text-purple-600 border-slate-300 rounded focus:ring-purple-500"
+                          />
+                          {target.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Problem Statement */}
+            <div className="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+              <h2 className="text-lg font-bold text-slate-800 mb-3 flex items-center gap-2">
+                <Info className="w-5 h-5 text-purple-600" />
+                Problem Statement
+              </h2>
+              <p className="text-base sm:text-lg leading-relaxed text-slate-700">
+                One mole of a <strong>{config.gasType} ideal gas</strong> is initially at a temperature of <strong>{displayState1.T} {config.units.T}</strong> and a pressure of <strong>{displayState1.P} {config.units.P}</strong> (State 1). 
+                It undergoes a reversible <strong>{problem.step1.type}</strong> process to a {problem.step1.type === 'isobaric' ? 'temperature' : 'pressure'} of <strong>{getTargetDisplay(problem.step1)}</strong> (State 2).
+                {config.steps === 2 && problem.step2 && (
+                  <span> Subsequently, it undergoes a reversible <strong>{problem.step2.type}</strong> process to a {problem.step2.type === 'isobaric' ? 'temperature' : 'pressure'} of <strong>{getTargetDisplay(problem.step2)}</strong> (State 3).</span>
+                )}
+              </p>
+              <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs sm:text-sm text-slate-600">
+                <strong>Given Constants:</strong> R = 8.314 J/(mol·K) or 83.14 cm³·bar/(mol·K). Note: Evaluate all Work using IUPAC convention (W = -∫P dV), so work done <em>on</em> the gas is positive.
+              </div>
+            </div>
+
+            {/* Input Sections */}
+            <div className="space-y-6">
+              {/* Step 1 Container */}
+              <div className="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="text-lg sm:text-xl font-bold text-purple-900 border-b pb-2 mb-4">Step 1: {problem.step1.type.charAt(0).toUpperCase() + problem.step1.type.slice(1)} Process (State 1 to State 2)</h3>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+                  <div>
+                    <h4 className="font-semibold text-slate-700 mb-4 bg-slate-100 py-1 px-3 rounded inline-block font-sans text-sm sm:text-base">State 2 Properties</h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                      {renderInputBox('step1', 'T2', 'Temperature (T₂)', 'T', problem.step1.type)}
+                      {renderInputBox('step1', 'P2', 'Pressure (P₂)', 'P', problem.step1.type)}
+                      {renderInputBox('step1', 'V2', 'Volume (V₂)', 'V', problem.step1.type)}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-slate-700 mb-4 bg-slate-100 py-1 px-3 rounded inline-block font-sans text-sm sm:text-base">Process Path Variables</h4>
+                    <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                      {config.calcTargets.W && renderInputBox('step1', 'W', 'Work (W)', 'E', problem.step1.type)}
+                      {config.calcTargets.Q && renderInputBox('step1', 'Q', 'Heat (Q)', 'E', problem.step1.type)}
+                      {config.calcTargets.dU && renderInputBox('step1', 'dU', 'Int. Energy (ΔU)', 'E', problem.step1.type)}
+                      {config.calcTargets.dH && renderInputBox('step1', 'dH', 'Enthalpy (ΔH)', 'E', problem.step1.type)}
+                      {config.calcTargets.dS && (
+                        <div className="col-span-2 sm:col-span-1">
+                          {renderInputBox('step1', 'dS', 'Entropy (ΔS)', 'S', problem.step1.type)}
+                        </div>
+                      )}
+                      {config.calcTargets.dV && renderInputBox('step1', 'dV', 'Vol. Change (ΔV)', 'V', problem.step1.type)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 2 Container (If Applicable) */}
+              {config.steps === 2 && problem.step2 && (
+                <div className="bg-white p-5 sm:p-6 rounded-xl shadow-sm border border-slate-200">
+                  <h3 className="text-lg sm:text-xl font-bold text-purple-950 border-b pb-2 mb-4">Step 2: {problem.step2.type.charAt(0).toUpperCase() + problem.step2.type.slice(1)} Process (State 2 to State 3)</h3>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8">
+                    <div>
+                      <h4 className="font-semibold text-slate-700 mb-4 bg-slate-100 py-1 px-3 rounded inline-block font-sans text-sm sm:text-base">State 3 Properties</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+                        {renderInputBox('step2', 'T3', 'Temperature (T₃)', 'T', problem.step2.type)}
+                        {renderInputBox('step2', 'P3', 'Pressure (P₃)', 'P', problem.step2.type)}
+                        {renderInputBox('step2', 'V3', 'Volume (V₃)', 'V', problem.step2.type)}
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-semibold text-slate-700 mb-4 bg-slate-100 py-1 px-3 rounded inline-block font-sans text-sm sm:text-base">Process Path Variables</h4>
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                        {config.calcTargets.W && renderInputBox('step2', 'W', 'Work (W)', 'E', problem.step2.type)}
+                        {config.calcTargets.Q && renderInputBox('step2', 'Q', 'Heat (Q)', 'E', problem.step2.type)}
+                        {config.calcTargets.dU && renderInputBox('step2', 'dU', 'Int. Energy (ΔU)', 'E', problem.step2.type)}
+                        {config.calcTargets.dH && renderInputBox('step2', 'dH', 'Enthalpy (ΔH)', 'E', problem.step2.type)}
+                        {config.calcTargets.dS && (
+                          <div className="col-span-2 sm:col-span-1">
+                            {renderInputBox('step2', 'dS', 'Entropy (ΔS)', 'S', problem.step2.type)}
+                          </div>
+                        )}
+                        {config.calcTargets.dV && renderInputBox('step2', 'dV', 'Vol. Change (ΔV)', 'V', problem.step2.type)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Bar */}
+            <div className="sticky bottom-4 z-10 flex justify-center mt-8 px-4">
+              <button 
+                onClick={checkAnswers}
+                className="bg-[#4F2683] hover:bg-[#3D1D66] text-white text-base sm:text-lg font-bold py-3 px-6 sm:px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-5 h-5 sm:w-6 sm:h-6" />
+                Check My Answers
+              </button>
+            </div>
+
+          </div>
+        </div>
+      );
+    }
+
+    // Mount Application
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
