@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThermoEagle - PR Calc</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- KaTeX for Beautiful Math Rendering -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        ttu: {
+                            purple: '#4E2A84',
+                            gold: '#FFC72C',
+                            darkPurple: '#371E5F',
+                            lightPurple: '#F3EFFF'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        /* Custom ranges to match TTU Purple */
+        input[type=range] {
+            accent-color: #4E2A84;
+        }
+        /* Hide HTML5 Number Input Spinners to prevent overlap with unit labels */
+        input::-webkit-outer-spin-button,
+        input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type=number] {
+            -moz-appearance: textfield; /* Firefox */
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans">
+
+    <!-- Header Block (TTU Purple & Gold) -->
+    <header class="bg-ttu-purple text-white shadow-md border-b-4 border-ttu-gold">
+        <div class="max-w-7xl mx-auto px-4 py-4 sm:py-5 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-white p-2 rounded-lg shadow-md">
+                    <!-- Eagle/Thermo Icon -->
+                    <svg class="w-8 h-8 text-ttu-purple" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-tight">
+                        ThermoEagle <span class="text-ttu-gold">PR Calc</span>
+                    </h1>
+                    <p class="text-xs font-bold tracking-widest text-ttu-lightPurple uppercase">Tennessee Tech Chemical Engineering</p>
+                </div>
+            </div>
+
+            <!-- Preset Bar -->
+            <div class="flex items-center gap-2 bg-ttu-darkPurple/60 p-1.5 rounded-lg border border-white/10 w-full md:w-auto">
+                <span class="text-xs font-bold text-ttu-gold px-2 uppercase">Presets:</span>
+                <select id="preset-select" class="bg-ttu-purple border border-white/20 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-ttu-gold cursor-pointer w-full md:w-auto">
+                    <option value="propane">Propane (C₃H₈)</option>
+                    <option value="water">Water (H₂O)</option>
+                    <option value="co2">Carbon Dioxide (CO₂)</option>
+                    <option value="methane">Methane (CH₄)</option>
+                    <option value="ethane">Ethane (C₂H₆)</option>
+                    <option value="custom">Custom Fluid</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-grow max-w-7xl mx-auto px-4 py-6 w-full grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Column: Parameters and Controls (4 Cols) -->
+        <section class="lg:col-span-4 flex flex-col gap-6">
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <div class="flex justify-between items-center mb-4 pb-3 border-b border-slate-100">
+                    <h2 class="font-bold text-ttu-purple flex items-center gap-2 text-md uppercase tracking-wider">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
+                        </svg>
+                        Controls
+                    </h2>
+                    <span id="regime-badge" class="px-2.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 border border-emerald-200">Single Phase</span>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Operating Temperature -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider" for="in-T">Temperature ($T$)</label>
+                            <span class="text-sm font-bold text-ttu-purple font-mono" id="val-T">350.0 K</span>
+                        </div>
+                        <input type="range" id="slider-T" min="100" max="800" step="1" value="350" class="w-full mb-2">
+                        <div class="relative">
+                            <input type="number" id="in-T" value="350" step="any" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition pr-10">
+                            <span class="absolute right-3 top-1.5 text-xs font-bold text-slate-400 select-none">K</span>
+                        </div>
+                    </div>
+
+                    <!-- Operating Pressure -->
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-xs font-bold text-slate-500 uppercase tracking-wider" for="in-P">Pressure ($P$)</label>
+                            <span class="text-sm font-bold text-ttu-purple font-mono" id="val-P">50.0 bar</span>
+                        </div>
+                        <input type="range" id="slider-P" min="1" max="300" step="0.5" value="50" class="w-full mb-2">
+                        <div class="relative">
+                            <input type="number" id="in-P" value="50" step="any" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition pr-12">
+                            <span class="absolute right-3 top-1.5 text-xs font-bold text-slate-400 select-none">bar</span>
+                        </div>
+                    </div>
+
+                    <div class="h-px bg-slate-100 my-2"></div>
+
+                    <!-- Critical Temp (Tc) -->
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Critical Temp ($T_c$)</label>
+                        <div class="relative">
+                            <input type="number" id="in-Tc" value="369.8" step="any" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition pr-10">
+                            <span class="absolute right-3 top-1.5 text-xs font-bold text-slate-400 select-none">K</span>
+                        </div>
+                    </div>
+
+                    <!-- Critical Pressure (Pc) -->
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Critical Pressure ($P_c$)</label>
+                        <div class="relative">
+                            <input type="number" id="in-Pc" value="42.48" step="any" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition pr-12">
+                            <span class="absolute right-3 top-1.5 text-xs font-bold text-slate-400 select-none">bar</span>
+                        </div>
+                    </div>
+
+                    <!-- Acentric Factor (w) -->
+                    <div>
+                        <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-1">Acentric Factor ($\omega$)</label>
+                        <input type="number" id="in-w" value="0.152" step="0.001" class="w-full bg-slate-50 border border-slate-200 rounded px-3 py-1.5 text-sm text-slate-800 focus:outline-none focus:border-ttu-purple focus:bg-white transition">
+                    </div>
+                </div>
+            </div>
+
+            <!-- EoS Info Panel -->
+            <div id="eos-info-panel" class="bg-ttu-lightPurple border border-ttu-purple/10 rounded-xl p-4 text-xs text-slate-600 leading-relaxed space-y-3">
+                <div>
+                    <span class="font-bold text-ttu-purple uppercase tracking-wider block mb-1">SVNAS Formulation Coordinates</span>
+                    Values $\beta$ and $q$ map directly to the textbook's generalized cubic equations:
+                    <div class="mt-2 text-center bg-white/70 p-2 rounded border border-ttu-purple/10 font-mono text-xs">
+                        $$\beta = \frac{bP}{RT} \quad \text{and} \quad q = \frac{a(T)}{bRT}$$
+                    </div>
+                </div>
+                <div class="pt-2 border-t border-ttu-purple/10">
+                    <span class="font-bold text-ttu-purple uppercase tracking-wider block mb-1">Physical Constants</span>
+                    Calculated using $R = 0.0831447 \text{ L}\cdot\text{bar}/(\text{mol}\cdot\text{K})$
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Interactive Dashboard (8 Cols) -->
+        <section class="lg:col-span-8 flex flex-col gap-6">
+
+            <!-- SECTION A: Native Physical Parameters (Dimensional) -->
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <h3 class="font-bold text-ttu-purple text-xs uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Native Physical Parameters (Dimensional)</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <!-- Physical parameter a(T) -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-500 tracking-wider">
+                            <span>ATTRACTIVE PARAMETER</span>
+                            <span class="text-ttu-purple font-serif font-bold">$a(T)$</span>
+                        </div>
+                        <div class="text-2xl font-black text-slate-800 my-2 font-mono" id="card-a-phys">-</div>
+                        <div class="text-[10px] text-slate-400 font-semibold tracking-wider">$\text{bar}\cdot\text{L}^2 / \text{mol}^2$</div>
+                    </div>
+
+                    <!-- Physical parameter b -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-500 tracking-wider">
+                            <span>CO-VOLUME PARAMETER</span>
+                            <span class="text-ttu-purple font-serif font-bold">$b$</span>
+                        </div>
+                        <div class="text-2xl font-black text-slate-800 my-2 font-mono" id="card-b-phys">-</div>
+                        <div class="text-[10px] text-slate-400 font-semibold tracking-wider">$\text{L} / \text{mol}$</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION B: SVNAS Dimensionless Parameters -->
+            <div id="svnas-parameters-section" class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <h3 class="font-bold text-ttu-purple text-xs uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">SVNAS Formulation Coordinates</h3>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                    <!-- Reduced Temperature -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-500 tracking-wider">
+                            <span>REDUCED TEMP</span>
+                            <span class="text-ttu-purple font-bold">$T_r$</span>
+                        </div>
+                        <div class="text-2xl font-black text-slate-800 my-2 font-mono" id="card-Tr">-</div>
+                        <div class="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
+                            <div id="bar-Tr" class="bg-ttu-purple h-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Reduced Pressure -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-500 tracking-wider">
+                            <span>REDUCED PRESS</span>
+                            <span class="text-ttu-purple font-bold">$P_r$</span>
+                        </div>
+                        <div class="text-2xl font-black text-slate-800 my-2 font-mono" id="card-Pr">-</div>
+                        <div class="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
+                            <div id="bar-Pr" class="bg-ttu-purple h-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Alpha scaling -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-500 tracking-wider">
+                            <span>ALPHA FUNCTION</span>
+                            <span class="text-ttu-purple font-bold">$\alpha$</span>
+                        </div>
+                        <div class="text-2xl font-black text-slate-800 my-2 font-mono" id="card-alpha">-</div>
+                        <div class="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
+                            <div id="bar-alpha" class="bg-ttu-purple h-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    <!-- Dimensionless Beta -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-500 tracking-wider">
+                            <span>COEFF b (beta)</span>
+                            <span class="text-ttu-purple font-bold font-serif">$\beta$</span>
+                        </div>
+                        <div class="text-2xl font-black text-slate-800 my-2 font-mono" id="card-beta">-</div>
+                        <div class="text-[10px] text-slate-400 font-semibold tracking-wider">Dimensionless</div>
+                    </div>
+
+                    <!-- Dimensionless q -->
+                    <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 flex flex-col justify-between">
+                        <div class="flex justify-between items-center text-xs font-bold text-slate-500 tracking-wider">
+                            <span>SVNAS RATIO</span>
+                            <span class="text-ttu-purple font-bold">$q$</span>
+                        </div>
+                        <div class="text-2xl font-black text-slate-800 my-2 font-mono" id="card-q">-</div>
+                        <div class="text-[10px] text-slate-400 font-semibold tracking-wider">Dimensionless</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ultimate Compressibility factor displays -->
+            <div class="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <h3 class="font-bold text-ttu-purple text-xs uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">Compressibility Roots ($Z$)</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4" id="z-root-container">
+                    <!-- Loaded dynamically via calculate JS -->
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Page Footer -->
+    <footer class="bg-white border-t border-slate-200 py-4 text-center mt-auto">
+        <p class="text-slate-400 text-xs font-bold uppercase tracking-widest">&copy; Tennessee Tech University &bull; ThermoEagle PR Calc &bull; SVNAS Metric Toolkit</p>
+    </footer>
+
+    <!-- Main Controller Logic -->
+    <script>
+        const substances = {
+            propane: { name: "Propane", Tc: 369.8, Pc: 42.48, w: 0.152, defT: 350, defP: 35 },
+            water: { name: "Water", Tc: 647.1, Pc: 220.55, w: 0.344, defT: 600, defP: 180 },
+            co2: { name: "CO2", Tc: 304.2, Pc: 73.82, w: 0.224, defT: 290, defP: 65 },
+            methane: { name: "Methane", Tc: 190.6, Pc: 45.99, w: 0.011, defT: 180, defP: 30 },
+            ethane: { name: "Ethane", Tc: 305.3, Pc: 48.72, w: 0.099, defT: 280, defP: 35 },
+            custom: { name: "Custom Fluid", Tc: 350.0, Pc: 50.0, w: 0.200, defT: 320, defP: 40 }
+        };
+
+        const R_GAS = 0.0831447; // L * bar / (mol * K)
+
+        const elements = {
+            inT: document.getElementById('in-T'),
+            inP: document.getElementById('in-P'),
+            sliderT: document.getElementById('slider-T'),
+            sliderP: document.getElementById('slider-P'),
+            inTc: document.getElementById('in-Tc'),
+            inPc: document.getElementById('in-Pc'),
+            inW: document.getElementById('in-w'),
+            presetSelect: document.getElementById('preset-select'),
+            valT: document.getElementById('val-T'),
+            valP: document.getElementById('val-P'),
+            regimeBadge: document.getElementById('regime-badge'),
+            
+            // Physical Parameters
+            cardAPhys: document.getElementById('card-a-phys'),
+            cardBPhys: document.getElementById('card-b-phys'),
+
+            // Dimensionless/SVNAS Parameters
+            cardTr: document.getElementById('card-Tr'),
+            cardPr: document.getElementById('card-Pr'),
+            cardAlpha: document.getElementById('card-alpha'),
+            cardBeta: document.getElementById('card-beta'),
+            cardQ: document.getElementById('card-q'),
+            barTr: document.getElementById('bar-Tr'),
+            barPr: document.getElementById('bar-Pr'),
+            barAlpha: document.getElementById('bar-alpha'),
+            zRootContainer: document.getElementById('z-root-container')
+        };
+
+        function solvePR(A, B) {
+            const c2 = B - 1;
+            const c1 = A - 2 * B - 3 * (B ** 2);
+            const c0 = (B ** 3) + (B ** 2) - A * B;
+
+            const Q = (c2 ** 2 - 3 * c1) / 9;
+            const R = (2 * (c2 ** 3) - 9 * c2 * c1 + 27 * c0) / 54;
+            const disc = R ** 2 - Q ** 3;
+
+            let roots = [];
+            if (disc < 0) {
+                const theta = Math.acos(R / Math.sqrt(Q ** 3));
+                const r1 = -2 * Math.sqrt(Q) * Math.cos(theta / 3) - c2 / 3;
+                const r2 = -2 * Math.sqrt(Q) * Math.cos((theta + 2 * Math.PI) / 3) - c2 / 3;
+                const r3 = -2 * Math.sqrt(Q) * Math.cos((theta + 4 * Math.PI) / 3) - c2 / 3;
+                roots = [r1, r2, r3].sort((a, b) => a - b);
+            } else {
+                const s1 = Math.sign(R + Math.sqrt(disc)) * Math.pow(Math.abs(R + Math.sqrt(disc)), 1 / 3);
+                const s2 = Math.sign(R - Math.sqrt(disc)) * Math.pow(Math.abs(R - Math.sqrt(disc)), 1 / 3);
+                roots = [(s1 + s2) - c2 / 3];
+            }
+            return { roots: roots.filter(r => r > B), c2, c1, c0 };
+        }
+
+        function calculate() {
+            const T = parseFloat(elements.inT.value);
+            const P = parseFloat(elements.inP.value);
+            const Tc = parseFloat(elements.inTc.value);
+            const Pc = parseFloat(elements.inPc.value);
+            const w = parseFloat(elements.inW.value);
+
+            if (isNaN(T) || T <= 0 || isNaN(P) || P <= 0) return;
+
+            elements.valT.textContent = `${T.toFixed(1)} K`;
+            elements.valP.textContent = `${P.toFixed(1)} bar`;
+
+            const Tr = T / Tc;
+            const Pr = P / Pc;
+            
+            // Kappa temperature scaling parameter
+            const kappa = 0.37464 + 1.54226 * w - 0.26992 * (w ** 2);
+            const alpha = (1 + kappa * (1 - Math.sqrt(Tr))) ** 2;
+
+            // 1. Native dimensional physical PR-EoS constants:
+            const a_T = 0.45724 * alpha * (R_GAS ** 2) * (Tc ** 2) / Pc;
+            const b = 0.07780 * R_GAS * Tc / Pc;
+
+            // 2. Map back to dimensionless formulations for cubic solver
+            const A = (a_T * P) / ((R_GAS * T) ** 2);
+            const B = (b * P) / (R_GAS * T); // Equal to beta
+            const q = B !== 0 ? A / B : 0;   // Equal to a(T) / (b * R * T)
+
+            const { roots } = solvePR(A, B);
+
+            // Populate Native Parameters (Dimensional)
+            elements.cardAPhys.textContent = a_T.toFixed(5);
+            elements.cardBPhys.textContent = b.toFixed(5);
+
+            // Populate SVNAS Parameters
+            elements.cardTr.textContent = Tr.toFixed(4);
+            elements.cardPr.textContent = Pr.toFixed(4);
+            elements.cardAlpha.textContent = alpha.toFixed(4);
+            elements.cardBeta.textContent = B.toFixed(5);
+            elements.cardQ.textContent = q.toFixed(4);
+
+            elements.barTr.style.width = `${Math.min(100, (Tr / 2) * 100)}%`;
+            elements.barPr.style.width = `${Math.min(100, (Pr / 3) * 100)}%`;
+            elements.barAlpha.style.width = `${Math.min(100, (alpha / 2) * 100)}%`;
+
+            let rootsHtml = "";
+            if (roots.length >= 3) {
+                elements.regimeBadge.textContent = "TWO-PHASE REGIME";
+                elements.regimeBadge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700 border border-amber-200";
+                
+                rootsHtml = `
+                    <div class="bg-ttu-purple text-white rounded-xl p-4 flex flex-col shadow-sm">
+                        <span class="text-[10px] font-bold uppercase tracking-widest opacity-85">Vapor Root ($Z_v$)</span>
+                        <div class="text-2xl font-black mt-1">${roots[2].toFixed(6)}</div>
+                    </div>
+                    <div class="bg-ttu-gold text-ttu-purple rounded-xl p-4 flex flex-col shadow-sm">
+                        <span class="text-[10px] font-bold uppercase tracking-widest opacity-85">Liquid Root ($Z_l$)</span>
+                        <div class="text-2xl font-black mt-1">${roots[0].toFixed(6)}</div>
+                    </div>
+                `;
+            } else {
+                elements.regimeBadge.textContent = "SINGLE PHASE";
+                elements.regimeBadge.className = "px-3 py-1 rounded-full text-[10px] font-bold bg-green-100 text-green-700 border border-green-200";
+                
+                const phase = roots[0] > 0.5 ? "Vapor-like" : "Liquid-like";
+                rootsHtml = `
+                    <div class="md:col-span-2 bg-slate-50 border border-slate-200 rounded-xl p-4 flex justify-between items-center shadow-inner">
+                        <div>
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Compressibility ($Z$)</span>
+                            <div class="text-3xl font-black text-ttu-purple mt-1">${roots[0] ? roots[0].toFixed(6) : "Error"}</div>
+                        </div>
+                        <div>
+                            <span class="px-3 py-1 bg-ttu-purple/10 text-ttu-purple rounded-full text-[10px] font-black uppercase">${phase}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            elements.zRootContainer.innerHTML = rootsHtml;
+
+            // Trigger KaTeX rendering on dynamically modified text block
+            if (window.renderMathInElement) {
+                renderMathInElement(elements.zRootContainer, {
+                    delimiters: [{left: '$', right: '$', display: false}]
+                });
+            }
+        }
+
+        function init() {
+            // Safely initialize KaTeX auto-render on DOM content when window is ready
+            if (window.renderMathInElement) {
+                renderMathInElement(document.body, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false}
+                    ]
+                });
+            }
+
+            elements.sliderT.addEventListener('input', e => { elements.inT.value = e.target.value; calculate(); });
+            elements.sliderP.addEventListener('input', e => { elements.inP.value = e.target.value; calculate(); });
+            elements.inT.addEventListener('input', e => { elements.sliderT.value = e.target.value; calculate(); });
+            elements.inP.addEventListener('input', e => { elements.sliderP.value = e.target.value; calculate(); });
+            
+            [elements.inTc, elements.inPc, elements.inW].forEach(el => {
+                el.addEventListener('input', () => {
+                    elements.presetSelect.value = 'custom';
+                    calculate();
+                });
+            });
+            
+            elements.presetSelect.addEventListener('change', e => {
+                const p = substances[e.target.value];
+                elements.inTc.value = p.Tc; 
+                elements.inPc.value = p.Pc; 
+                elements.inW.value = p.w;
+                elements.inT.value = p.defT; 
+                elements.sliderT.value = p.defT;
+                elements.inP.value = p.defP; 
+                elements.sliderP.value = p.defP;
+                calculate();
+            });
+
+            calculate();
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
