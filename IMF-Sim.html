@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ThermoEagle - IMF Simulator (PR-EoS)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for beautiful icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- MathJax for rendering equations -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    
+    <style>
+        /* Custom scrollbar styling for a premium feel */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 min-h-full flex flex-col font-sans antialiased selection:bg-[#4F2984] selection:text-white">
+
+    <!-- Header with Tennessee Tech purple (#4F2984) and gold highlights -->
+    <header class="bg-[#4F2984] text-white px-6 py-4 sticky top-0 z-50 shadow-md border-b-4 border-[#FFDD00]">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="p-2.5 bg-white/10 rounded-xl shadow-inner border border-white/20">
+                    <i class="fa-solid fa-eagle text-xl text-[#FFDD00] animate-pulse"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-tight flex items-center gap-2">
+                        ThermoEagle <span class="text-xs font-semibold px-2 py-0.5 rounded bg-[#FFDD00] text-[#4F2984]">IMF Simulator</span>
+                    </h1>
+                    <p class="text-xs text-slate-200">Exploring real fluids and intermolecular forces using the Peng-Robinson Equation of State</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="text-xs px-2.5 py-1 rounded-full border border-white/20 bg-white/5 text-slate-100">
+                    Model: <strong class="text-[#FFDD00]">Peng-Robinson (PR-EoS)</strong>
+                </span>
+                <button id="btn-info-modal" class="text-xs px-3 py-1 rounded-full border border-[#FFDD00]/30 hover:border-[#FFDD00] bg-[#FFDD00]/10 hover:bg-[#FFDD00]/20 text-[#FFDD00] transition-all flex items-center gap-1 font-semibold">
+                    <i class="fa-solid fa-circle-info"></i> EoS Theory
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- Left Side: Interactive Controls & Live Physics Math -->
+        <section class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- Parameters Controller Card (Mostly White with TTU Purple highlights) -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col gap-5">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 class="font-bold text-[#4F2984] flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <i class="fa-solid fa-sliders text-[#4F2984]"></i> Reduced Variables
+                    </h2>
+                    <span class="text-xs text-slate-500">Adjust to control simulation</span>
+                </div>
+
+                <!-- Slider 1: Tr -->
+                <div class="space-y-2">
+                    <div class="flex justify-between text-sm">
+                        <label class="text-slate-700 font-semibold flex items-center gap-1.5">
+                            Reduced Temp (\(T_r\))
+                            <span class="text-xs text-slate-400">(\(T / T_c\))</span>
+                        </label>
+                        <span id="val-tr" class="font-mono font-bold text-[#4F2984] text-base">1.00</span>
+                    </div>
+                    <input type="range" id="slider-tr" min="0.5" max="3.0" step="0.01" value="1.0" 
+                           class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#4F2984] focus:outline-none">
+                    <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>0.5 (Subcritical)</span>
+                        <span>1.0 (Critical)</span>
+                        <span>3.0 (Supercritical)</span>
+                    </div>
+                </div>
+
+                <!-- Slider 2: Pr -->
+                <div class="space-y-2">
+                    <div class="flex justify-between text-sm">
+                        <label class="text-slate-700 font-semibold flex items-center gap-1.5">
+                            Reduced Pressure (\(P_r\))
+                            <span class="text-xs text-slate-400">(\(P / P_c\))</span>
+                        </label>
+                        <span id="val-pr" class="font-mono font-bold text-[#4F2984] text-base">1.00</span>
+                    </div>
+                    <input type="range" id="slider-pr" min="0.05" max="8.0" step="0.01" value="1.0" 
+                           class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#4F2984] focus:outline-none">
+                    <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>0.05 (Low Density)</span>
+                        <span>1.0 (Critical)</span>
+                        <span>8.0 (High Repulsion)</span>
+                    </div>
+                </div>
+
+                <!-- Slider 3: Acentric Factor -->
+                <div class="space-y-2">
+                    <div class="flex justify-between text-sm">
+                        <label class="text-slate-700 font-semibold flex items-center gap-1.5">
+                            Acentric Factor (\(\omega\))
+                            <span class="text-xs text-slate-400">(Molecular Complexity)</span>
+                        </label>
+                        <span id="val-omega" class="font-mono font-bold text-[#4F2984] text-base">0.100</span>
+                    </div>
+                    <input type="range" id="slider-omega" min="0.0" max="0.6" step="0.005" value="0.1" 
+                           class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#4F2984] focus:outline-none">
+                    <div class="flex justify-between text-[10px] text-slate-400 font-mono">
+                        <span>0.0 (Simple, e.g., Argon)</span>
+                        <span>0.6 (Highly Polar)</span>
+                    </div>
+                </div>
+
+                <!-- Multiple Roots Selector / Information -->
+                <div id="root-selector-container" class="hidden p-3 bg-purple-50 border-2 border-[#4F2984]/30 rounded-xl space-y-2 transition-all">
+                    <div class="flex items-center justify-between">
+                        <span class="text-xs font-bold text-[#4F2984] uppercase tracking-wider flex items-center gap-1">
+                            <i class="fa-solid fa-circle-exclamation text-amber-500"></i> Phase Coexistence Zone
+                        </span>
+                        <span class="text-[10px] bg-[#4F2984]/10 text-[#4F2984] px-1.5 py-0.5 rounded font-semibold">3 Real Roots Found</span>
+                    </div>
+                    <p class="text-xs text-slate-600">Select which phase state you wish to visualize on the dynamic canvas:</p>
+                    <div class="grid grid-cols-2 gap-2 mt-1">
+                        <button id="btn-root-liquid" class="py-2 px-3 rounded-lg border text-xs font-medium transition-all text-center">
+                            Liquid-Like State<br><span class="text-[10px] font-mono" id="root-val-liquid">Z = --</span>
+                        </button>
+                        <button id="btn-root-vapor" class="py-2 px-3 rounded-lg border text-xs font-medium transition-all text-center">
+                            Vapor-Like State<br><span class="text-[10px] font-mono" id="root-val-vapor">Z = --</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Calculated Properties Card (Mostly White with light-gray borders) -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h2 class="font-bold text-[#4F2984] flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <i class="fa-solid fa-calculator text-emerald-600"></i> Thermodynamics Output
+                    </h2>
+                </div>
+
+                <!-- Big Z value indicator with TTU Purple / Light Gray styling -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div class="md:col-span-2 flex flex-col justify-center">
+                        <div class="text-xs text-slate-500 font-medium">Compressibility Factor (Z)</div>
+                        <div class="flex items-baseline gap-2 mt-1">
+                            <span id="txt-z-val" class="text-3xl font-black font-mono text-[#4F2984]">1.0000</span>
+                            <span id="txt-imf-regime" class="text-xs font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">Ideal Gas</span>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center border-t md:border-t-0 md:border-l border-slate-200 pt-3 md:pt-0">
+                        <div class="text-[9px] text-slate-500 mb-1 font-semibold text-center leading-tight">Deviation from Ideal Gas Behavior</div>
+                        <span id="txt-z-dev" class="text-lg font-mono font-black text-slate-600">0.0%</span>
+                    </div>
+                </div>
+
+                <!-- Parameters breakdown in clean light mode grid with lowercase labels -->
+                <div class="grid grid-cols-2 gap-3 text-xs font-mono">
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <div class="text-slate-500 text-[10px] font-bold">attractive parameter (a)</div>
+                        <div id="param-A" class="text-emerald-600 font-bold mt-0.5">--</div>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <div class="text-slate-500 text-[10px] font-bold">repulsive parameter (b)</div>
+                        <div id="param-B" class="text-rose-600 font-bold mt-0.5">--</div>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <div class="text-slate-500 text-[10px] font-bold">beta (\(\beta\)) parameter</div>
+                        <div id="param-beta" class="text-indigo-600 font-bold mt-0.5">--</div>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <div class="text-slate-500 text-[10px] font-bold">q parameter (\(a / bRT\))</div>
+                        <div id="param-q" class="text-amber-600 font-bold mt-0.5">--</div>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                        <div class="text-slate-500 text-[10px] font-bold">alpha (\(\alpha\)) factor</div>
+                        <div id="param-alpha" class="text-blue-600 font-bold mt-0.5">--</div>
+                    </div>
+                    <div class="bg-slate-50 p-2.5 rounded-lg border border-slate-200 flex flex-col justify-between">
+                        <div class="text-slate-500 text-[10px] font-bold">EOS roots</div>
+                        <div id="param-roots-count" class="text-[#4F2984] font-bold mt-0.5">--</div>
+                    </div>
+                </div>
+
+                <!-- Dynamic Description Box -->
+                <div class="p-4 rounded-xl border bg-slate-50 text-xs leading-relaxed space-y-1 border-slate-200" id="desc-box">
+                    <p class="font-bold text-slate-700">Physical State Narrative:</p>
+                    <p id="desc-text" class="text-slate-600">
+                        Loading physical behavior calculations...
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Side: Visualization and Plots -->
+        <section class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- Canvas Simulation Card (Clean White/Gray Theme) -->
+            <div class="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col overflow-hidden">
+                <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                    <div class="flex items-center gap-2">
+                        <div id="status-glow" class="w-2.5 h-2.5 rounded-full bg-slate-400"></div>
+                        <h2 class="font-bold text-sm uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                            <i class="fa-solid fa-flask-bubble text-[#4F2984]"></i> Microscopic IMF Force Vector Visualizer
+                        </h2>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <button id="btn-reset-sim" class="text-xs text-slate-500 hover:text-[#4F2984] transition-colors font-semibold" title="Re-initialize particles">
+                            <i class="fa-solid fa-rotate-right"></i> Reset Sim
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Highly customized white testing grid canvas representing gas space -->
+                <div class="relative bg-white flex justify-center items-center overflow-hidden h-[340px] border-b border-slate-200">
+                    <!-- Particle Canvas -->
+                    <canvas id="canvas-particles" class="absolute inset-0 w-full h-full cursor-pointer"></canvas>
+                    
+                    <!-- Dynamic Overlay explaining force strength visual indicators -->
+                    <div class="absolute bottom-3 left-3 bg-white/95 border border-slate-200 rounded-lg p-2.5 text-[10px] text-slate-600 max-w-xs space-y-1 shadow-md pointer-events-none z-10">
+                        <div class="font-bold border-b border-slate-100 pb-1 mb-1 text-[#4F2984] uppercase tracking-wider">Dynamic Visual Indicators</div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded-full bg-slate-100 border-2 border-slate-400"></div>
+                            <span>Molecule core size (relative to co-volume \(b\))</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-0.5 bg-cyan-500"></div>
+                            <span>Attractive Force Vectors (active when close)</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded-full border border-dashed border-rose-500/50 bg-rose-500/10"></div>
+                            <span>Overlapping Repulsive Shields (highly compressed)</span>
+                        </div>
+                    </div>
+
+                    <!-- Alert message overlays inside canvas -->
+                    <div id="canvas-regime-banner" class="absolute top-4 right-4 px-3 py-1.5 rounded-lg border border-slate-200 bg-white/90 text-xs font-bold text-slate-700 shadow-sm backdrop-blur pointer-events-none z-10">
+                        Ideal State
+                    </div>
+                </div>
+
+                <!-- Canvas Sub-Stats Dashboard -->
+                <div class="p-4 bg-slate-50 grid grid-cols-3 gap-4 text-center text-xs border-t border-slate-100">
+                    <div>
+                        <span class="text-slate-500 block mb-1 font-semibold">Simulated Density</span>
+                        <strong id="sim-density" class="text-slate-800 text-sm font-mono">Medium</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block mb-1 font-semibold">Effective Volume</span>
+                        <strong id="sim-volume" class="text-slate-800 text-sm font-mono">100%</strong>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block mb-1 font-semibold">Dominant Force</span>
+                        <strong id="sim-dominant-force" class="text-slate-800 text-sm font-mono">None (Ideal)</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart.js Realtime Plot Card -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                    <h2 class="font-bold text-[#4F2984] flex items-center gap-2 text-sm uppercase tracking-wider">
+                        <i class="fa-solid fa-chart-line text-[#4F2984]"></i> Compressibility Isotherm Chart
+                    </h2>
+                    <span class="text-[10px] text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded font-mono">PR-EoS Isotherm Curve</span>
+                </div>
+                <div class="relative h-[250px] w-full">
+                    <canvas id="chart-eos"></canvas>
+                </div>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- Interactive Info Modal in Clean Light Mode -->
+    <div id="info-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto space-y-4 text-slate-700">
+            <button id="btn-close-modal" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 text-lg transition-colors">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <h2 class="text-xl font-black text-[#4F2984] flex items-center gap-2">
+                <i class="fa-solid fa-circle-question text-[#FFDD00]"></i> Thermodynamics & Equation of State
+            </h2>
+            
+            <div class="space-y-4 text-sm leading-relaxed text-slate-600">
+                <p>
+                    The <strong>Peng-Robinson Equation of State (PR-EoS)</strong> is a semi-empirical mathematical model developed in 1976. It maps the non-ideal behavior of real gases, vapor-liquid phase equilibrium, and supercritical conditions by adjusting the Ideal Gas Law:
+                </p>
+                <div class="p-4 bg-slate-50 rounded-xl border border-slate-200 flex justify-center text-center font-mono text-slate-800">
+                    $$P = \frac{R T}{V_m - b} - \frac{a(T)}{V_m^2 + 2bV_m - b^2}$$
+                </div>
+                
+                <h3 class="font-bold text-[#4F2984] text-base mt-2">What physical factors does PR-EoS correct?</h3>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li>
+                        <strong>Repulsive Co-volume factor (\(b\)):</strong> Molecules are not mathematical point particles; they occupy definite physical space. When compressed, the remaining free volume available is less than the box volume. This creates strong physical <em>repulsive forces</em> at short range.
+                    </li>
+                    <li>
+                        <strong>Cohesive Attraction parameter (\(a(T)\)):</strong> Molecules exert intermolecular attractive forces (Van der Waals/London dispersion forces) at medium range, pulling neighbors back and lowering the net impact pressure on container boundaries.
+                    </li>
+                </ul>
+
+                <h3 class="font-bold text-[#4F2984] text-base mt-2">Compressibility Factor (\(Z\)) Interpretation</h3>
+                <ul class="list-decimal pl-5 space-y-2">
+                    <li>
+                        <strong>\(Z = 1\) (Ideal behavior):</strong> The volume matches the ideal gas equation. Visually, particles move in straight paths, reflecting low pressures or precise force-balancing acts.
+                    </li>
+                    <li>
+                        <strong>\(Z < 1\) (Attraction dominant):</strong> The measured volume is smaller than the ideal gas value. Intermolecular attractive forces are active and pull particles together into clusters.
+                    </li>
+                    <li>
+                        <strong>\(Z > 1\) (Repulsion dominant):</strong> The measured volume is larger than the ideal gas prediction. Over-compression forces particles so close that their nuclear co-volume shields repel violently.
+                    </li>
+                </ul>
+            </div>
+            
+            <div class="pt-4 border-t border-slate-100 flex justify-end">
+                <button id="btn-close-modal-bottom" class="px-5 py-2 rounded-xl bg-[#4F2984] hover:bg-[#3c1e64] font-bold text-white text-xs transition-colors shadow">
+                    Got it, let's explore!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // -------------------------------------------------------------
+        // Thermodynamic Solvers: Peng-Robinson Cubic Equation of State
+        // -------------------------------------------------------------
+        
+        // Critical values constants for PR equation
+        const R = 8.314462618; // Universal gas constant in J/(mol K)
+        
+        // Calculate PR Constants based on reduced conditions
+        function calculatePR(Tr, Pr, omega) {
+            // Standard parameters for Peng-Robinson
+            const ac = 0.45724;
+            const bc = 0.07780;
+            
+            // Calculate kappa based on acentric factor
+            let kappa;
+            if (omega <= 0.49) {
+                kappa = 0.37464 + 1.54226 * omega - 0.26992 * (omega * omega);
+            } else {
+                // Extended acentric factor formula for complex molecules
+                kappa = 0.37964 + 1.48503 * omega - 0.1644 * (omega * omega) + 0.01666 * (omega * omega * omega);
+            }
+            
+            // Temperature correction factor alpha
+            const alpha = Math.pow(1 + kappa * (1 - Math.sqrt(Tr)), 2);
+            
+            // Reduced coefficients
+            const A = ac * alpha * Pr / (Tr * Tr);
+            const B = bc * Pr / Tr;
+            
+            return { A, B, alpha, kappa };
+        }
+
+        // Solve Cubic Equation Z^3 + c2 * Z^2 + c1 * Z + c0 = 0
+        function solvePRCubic(A, B) {
+            const c2 = -(1 - B);
+            const c1 = A - 2 * B - 3 * (B * B);
+            const c0 = -(A * B - (B * B) - (B * B * B));
+            
+            return solveCubic(c2, c1, c0);
+        }
+
+        // Analytical solution for general cubic: x^3 + a2*x^2 + a1*x + a0 = 0
+        function solveCubic(a2, a1, a0) {
+            const Q = (3 * a1 - (a2 * a2)) / 9;
+            const R = (9 * a2 * a1 - 27 * a0 - 2 * (a2 * a2 * a2)) / 54;
+            const D = (Q * Q * Q) + (R * R);
+            
+            let roots = [];
+            
+            if (D > 0) {
+                // One real root, two complex conjugates
+                const S = Math.cbrt(R + Math.sqrt(D));
+                const T = Math.cbrt(R - Math.sqrt(D));
+                const r1 = S + T - (a2 / 3);
+                roots.push(r1);
+            } else {
+                // Three real roots
+                const theta = Math.acos(R / Math.sqrt(-Math.pow(Q, 3)));
+                const r1 = 2 * Math.sqrt(-Q) * Math.cos(theta / 3) - (a2 / 3);
+                const r2 = 2 * Math.sqrt(-Q) * Math.cos((theta + 2 * Math.PI) / 3) - (a2 / 3);
+                const r3 = 2 * Math.sqrt(-Q) * Math.cos((theta + 4 * Math.PI) / 3) - (a2 / 3);
+                
+                roots.push(r1, r2, r3);
+                // Sort roots in ascending order (Liquid root is smallest, Gas is largest)
+                roots.sort((a, b) => a - b);
+            }
+            
+            // Filter out mathematically invalid roots (must be positive to represent physical state)
+            return roots.filter(r => r > 0);
+        }
+
+        // -------------------------------------------------------------
+        // Particle Simulation Engine (Light Canvas based)
+        // -------------------------------------------------------------
+        const canvas = document.getElementById('canvas-particles');
+        const ctx = canvas.getContext('2d');
+        
+        let particles = [];
+        const numParticles = 75;
+        let animationFrameId;
+
+        // Visual and state properties linked to thermodynamics
+        let state = {
+            Tr: 1.0,
+            Pr: 1.0,
+            omega: 0.1,
+            Z: 1.0,
+            A: 0.0,
+            B: 0.0,
+            activeRootType: 'vapor', // 'vapor' or 'liquid' when multiple roots exist
+            roots: []
+        };
+
+        // Resize Canvas dynamically
+        function resizeCanvas() {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * window.devicePixelRatio;
+            canvas.height = rect.height * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        
+        // Handle initial load and window resizing
+        window.addEventListener('resize', () => {
+            resizeCanvas();
+        });
+
+        // Initialize particles
+        class Particle {
+            constructor() {
+                this.reset();
+            }
+            
+            reset() {
+                const margin = 20;
+                this.x = margin + Math.random() * (canvas.clientWidth - 2 * margin);
+                this.y = margin + Math.random() * (canvas.clientHeight - 2 * margin);
+                
+                // Random velocities
+                const speed = 1.0;
+                const angle = Math.random() * Math.PI * 2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                
+                this.baseRadius = 5; // representation of molecule's nuclear size
+                this.radius = 5;
+                this.mass = 1.0;
+            }
+
+            update(Z, scaleDensity, attractionStrength, repulsionStrength) {
+                // Adapt particle characteristics based on thermodynamics
+                // Density scales size and collision physics
+                this.radius = this.baseRadius + (repulsionStrength * 4.5); // repulsive core size expands under high pressure (high b)
+                
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // Border boundaries collisions
+                const boundsX = canvas.clientWidth;
+                const boundsY = canvas.clientHeight;
+
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx *= -1;
+                }
+                if (this.x + this.radius > boundsX) {
+                    this.x = boundsX - this.radius;
+                    this.vx *= -1;
+                }
+                if (this.y - this.radius < 0) {
+                    this.y = this.radius;
+                    this.vy *= -1;
+                }
+                if (this.y + this.radius > boundsY) {
+                    this.y = boundsY - this.radius;
+                    this.vy *= -1;
+                }
+            }
+
+            draw() {
+                // Main atomic center
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.baseRadius, 0, Math.PI * 2);
+                
+                // Colors configured specifically to stand out beautifully against white
+                if (state.Z > 1.01) {
+                    ctx.fillStyle = '#e11d48'; // Rose red (Repulsion)
+                } else if (state.Z < 0.99) {
+                    ctx.fillStyle = '#0891b2'; // Cyan/Teal (Attraction)
+                } else {
+                    ctx.fillStyle = '#4F2984'; // TTU Purple (Ideal/Balanced)
+                }
+                ctx.fill();
+
+                // Draw repulsive halo outline if Z > 1
+                if (state.Z > 1.02) {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                    const alpha = Math.min((state.Z - 1) / 3, 0.4);
+                    ctx.strokeStyle = `rgba(225, 29, 72, ${alpha})`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            }
+        }
+
+        // Initialize/reset particle collection
+        function initParticles() {
+            particles = [];
+            for (let i = 0; i < numParticles; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        // Apply intermolecular forces and elastic collisions between particles
+        function solveInteractions() {
+            // Determine thermodynamic scale effects
+            const dev = state.Z - 1;
+            
+            // Scaled constants from PR math outputs
+            const attractionOn = dev < -0.01;
+            const repulsionOn = dev > 0.01;
+            
+            // Adjust speeds based on Temperature (Tr)
+            const speedMultiplier = Math.sqrt(state.Tr);
+
+            // Double iteration over all pairwise particle combinations
+            for (let i = 0; i < particles.length; i++) {
+                const p1 = particles[i];
+                
+                for (let j = i + 1; j < particles.length; j++) {
+                    const p2 = particles[j];
+                    
+                    const dx = p2.x - p1.x;
+                    const dy = p2.y - p1.y;
+                    const distSq = dx * dx + dy * dy;
+                    const dist = Math.sqrt(distSq);
+                    
+                    // Collision distance is determined by the active repulsive shield
+                    const minDist = p1.radius + p2.radius;
+
+                    if (dist < minDist && dist > 0.1) {
+                        // Resolve physical elastic overlap/bounce
+                        const nx = dx / dist;
+                        const ny = dy / dist;
+                        
+                        // Overlap resolution
+                        const overlap = minDist - dist;
+                        p1.x -= nx * overlap * 0.5;
+                        p1.y -= ny * overlap * 0.5;
+                        p2.x += nx * overlap * 0.5;
+                        p2.y += ny * overlap * 0.5;
+
+                        // Calculate relative velocities along normal vectors
+                        const kx = p1.vx - p2.vx;
+                        const ky = p1.vy - p2.vy;
+                        const pVelocity = kx * nx + ky * ny;
+
+                        if (pVelocity > 0) {
+                            const impulse = (2 * pVelocity) / (p1.mass + p2.mass);
+                            
+                            // Apply collision force with velocity boost if high pressure/repulsion
+                            const repulsionBoost = repulsionOn ? (1 + (state.Z - 1) * 0.5) : 1;
+                            
+                            p1.vx -= impulse * p2.mass * nx * repulsionBoost;
+                            p1.vy -= impulse * p2.mass * ny * repulsionBoost;
+                            p2.vx += impulse * p1.mass * nx * repulsionBoost;
+                            p2.vy += impulse * p1.mass * ny * repulsionBoost;
+                        }
+                    }
+
+                    // --- ATTRACTION FORCES (Z < 1) ---
+                    // Draw cohesive force webs and pull molecules together
+                    if (attractionOn && dist < 70 && dist > minDist) {
+                        const attractionForceCoeff = Math.abs(dev) * 0.08; 
+                        
+                        // Pull vector
+                        const force = (1 / (distSq + 20)) * attractionForceCoeff * 150;
+                        const fx = (dx / dist) * force;
+                        const fy = (dy / dist) * force;
+
+                        p1.vx += fx;
+                        p1.vy += fy;
+                        p2.vx -= fx;
+                        p2.vy -= fy;
+
+                        // Visual attraction lines linking nearby cluster members
+                        const opacity = Math.min((1 - dist / 70) * Math.abs(dev) * 0.7, 0.6);
+                        ctx.beginPath();
+                        ctx.moveTo(p1.x, p1.y);
+                        ctx.lineTo(p2.x, p2.y);
+                        ctx.strokeStyle = `rgba(8, 145, 178, ${opacity})`;
+                        ctx.lineWidth = Math.min(Math.abs(dev) * 2, 1.5);
+                        ctx.stroke();
+                    }
+                }
+                
+                // Limit maximum velocity to prevent numeric instability explosion
+                const speedLimit = 3.5 * speedMultiplier;
+                const currentSpeed = Math.sqrt(p1.vx * p1.vx + p1.vy * p1.vy);
+                if (currentSpeed > speedLimit) {
+                    p1.vx = (p1.vx / currentSpeed) * speedLimit;
+                    p1.vy = (p1.vy / currentSpeed) * speedLimit;
+                }
+            }
+        }
+
+        // Draw active grid lines in background of canvas to feel scientific
+        function drawGrid() {
+            ctx.strokeStyle = "rgba(79, 41, 132, 0.05)"; // Super light purple grid lines
+            ctx.lineWidth = 1;
+            const size = 30;
+            for (let x = 0; x < canvas.clientWidth; x += size) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.clientHeight);
+                ctx.stroke();
+            }
+            for (let y = 0; y < canvas.clientHeight; y += size) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.clientWidth, y);
+                ctx.stroke();
+            }
+        }
+
+        // Core animation cycle
+        function animate() {
+            ctx.clearRect(0, 0, canvas.clientWidth, canvas.clientHeight);
+            
+            // Draw visual testing chamber grid pattern
+            drawGrid();
+
+            const dev = state.Z - 1;
+            const scaleDensity = state.Pr / state.Tr;
+            const attractionStrength = dev < 0 ? Math.abs(dev) : 0;
+            const repulsionStrength = dev > 0 ? dev : 0;
+
+            // Compute inter-particle attraction and collisions
+            solveInteractions();
+
+            // Render and update each molecular particle
+            particles.forEach(p => {
+                p.update(state.Z, scaleDensity, attractionStrength, repulsionStrength);
+                p.draw();
+            });
+
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        // -------------------------------------------------------------
+        // Isotherm Interactive Graph (Chart.js Light Mode Configuration)
+        // -------------------------------------------------------------
+        let chartInstance = null;
+
+        function initChart() {
+            const chartCanvas = document.getElementById('chart-eos');
+            const chartCtx = chartCanvas.getContext('2d');
+            
+            // Chart configuration optimized for white backgrounds
+            chartInstance = new Chart(chartCtx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: 'Ideal Gas Z = 1',
+                            data: Array.from({length: 40}, (_, i) => ({x: (i + 1) * 0.2, y: 1.0})),
+                            borderColor: 'rgba(79, 41, 132, 0.2)', // Lightized Tech Purple
+                            borderWidth: 1.5,
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: 'EoS Isotherm Curve',
+                            data: [],
+                            borderColor: '#4F2984', // TTU Purple Isotherm line
+                            borderWidth: 2.5,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Liquid Phase Segment',
+                            data: [],
+                            borderColor: '#ec4899',
+                            borderWidth: 2.5,
+                            pointRadius: 0,
+                            fill: false,
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Selected State',
+                            data: [{x: 1.0, y: 1.0}],
+                            backgroundColor: '#4F2984',
+                            borderColor: '#FFDD00', // Gold outline around selector
+                            borderWidth: 2.5,
+                            pointRadius: 7,
+                            pointHoverRadius: 9,
+                            showLine: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: {
+                                display: true,
+                                text: 'Reduced Pressure (Pr)',
+                                color: '#475569',
+                                font: { size: 10, weight: 'bold' }
+                            },
+                            grid: { color: '#f1f5f9' },
+                            ticks: { color: '#475569', font: { size: 9 } },
+                            min: 0.01,
+                            max: 8.0
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Compressibility (Z)',
+                                color: '#475569',
+                                font: { size: 10, weight: 'bold' }
+                            },
+                            grid: { color: '#f1f5f9' },
+                            ticks: { color: '#475569', font: { size: 9 } },
+                            min: 0.0,
+                            max: 2.5
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                color: '#1e293b',
+                                font: { size: 9 },
+                                boxWidth: 12
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: (Pr: ${context.parsed.x.toFixed(2)}, Z: ${context.parsed.y.toFixed(4)})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Redraw isothermal curves based on newly set Tr and omega
+        function updateChartCurve() {
+            if (!chartInstance) return;
+
+            const Tr = state.Tr;
+            const omega = state.omega;
+            
+            const isothermPoints = [];
+            const liquidBranchPoints = [];
+            
+            // Loop through pressure intervals to compute Isotherm plot
+            for (let testPr = 0.05; testPr <= 8.0; testPr += 0.15) {
+                const testParams = calculatePR(Tr, testPr, omega);
+                const testRoots = solvePRCubic(testParams.A, testParams.B);
+                
+                if (testRoots.length === 1) {
+                    isothermPoints.push({ x: testPr, y: testRoots[0] });
+                } else if (testRoots.length === 3) {
+                    // Two phase boundaries are present
+                    // We can plot Vapor-like root
+                    isothermPoints.push({ x: testPr, y: testRoots[2] });
+                    // Store Liquid branch separate for distinct coloring
+                    liquidBranchPoints.push({ x: testPr, y: testRoots[0] });
+                }
+            }
+            
+            // Sort points
+            isothermPoints.sort((a, b) => a.x - b.x);
+            liquidBranchPoints.sort((a, b) => a.x - b.x);
+
+            // Update chart dataset structures
+            chartInstance.data.datasets[1].data = isothermPoints;
+            chartInstance.data.datasets[2].data = liquidBranchPoints;
+            chartInstance.data.datasets[3].data = [{ x: state.Pr, y: state.Z }];
+            
+            // Change current indicator color dynamically based on phase type
+            if (state.Z > 1) {
+                chartInstance.data.datasets[3].backgroundColor = '#e11d48'; // Red (Repulsive)
+            } else if (state.Z < 1) {
+                chartInstance.data.datasets[3].backgroundColor = '#0891b2'; // Cyan (Attractive)
+            } else {
+                chartInstance.data.datasets[3].backgroundColor = '#4F2984'; // TTU Purple (Balanced)
+            }
+
+            chartInstance.update('none'); // Update without full animation lag
+        }
+
+        // -------------------------------------------------------------
+        // Main Controller / Orchestrator Engine
+        // -------------------------------------------------------------
+        
+        // Element references
+        const sTr = document.getElementById('slider-tr');
+        const sPr = document.getElementById('slider-pr');
+        const sOmega = document.getElementById('slider-omega');
+
+        const vTr = document.getElementById('val-tr');
+        const vPr = document.getElementById('val-pr');
+        const vOmega = document.getElementById('val-omega');
+
+        const txtZVal = document.getElementById('txt-z-val');
+        const txtZDev = document.getElementById('txt-z-dev');
+        const txtImfRegime = document.getElementById('txt-imf-regime');
+        const descText = document.getElementById('desc-text');
+
+        const rootContainer = document.getElementById('root-selector-container');
+        const btnRootLiquid = document.getElementById('btn-root-liquid');
+        const btnRootVapor = document.getElementById('btn-root-vapor');
+        const rootValLiquid = document.getElementById('root-val-liquid');
+        const rootValVapor = document.getElementById('root-val-vapor');
+
+        const pA = document.getElementById('param-A');
+        const pB = document.getElementById('param-B');
+        const pAlpha = document.getElementById('param-alpha');
+        const pRootsCount = document.getElementById('param-roots-count');
+
+        const statusGlow = document.getElementById('status-glow');
+        const canvasBanner = document.getElementById('canvas-regime-banner');
+        
+        const simDensity = document.getElementById('sim-density');
+        const simVolume = document.getElementById('sim-volume');
+        const simDominantForce = document.getElementById('sim-dominant-force');
+
+        // Dynamic Text Narratives based on Z results
+        function updateNarratives() {
+            const dev = state.Z - 1;
+            const deviationPercent = (Math.abs(dev) * 100).toFixed(1);
+            txtZDev.textContent = `${deviationPercent}%`;
+            
+            // Scale deviation indicator color
+            if (state.Z > 1) {
+                txtZDev.className = "text-lg font-mono font-black text-rose-600";
+            } else if (state.Z < 1) {
+                txtZDev.className = "text-lg font-mono font-black text-cyan-600";
+            } else {
+                txtZDev.className = "text-lg font-mono font-black text-slate-500";
+            }
+
+            // Visual details on Canvas panel labels
+            const approxDensity = (state.Pr / (state.Tr * state.Z)).toFixed(2);
+            simDensity.textContent = approxDensity < 0.2 ? "Low (Gas)" : approxDensity > 1.5 ? "Very High (Liquid)" : "Medium Fluid";
+            simVolume.textContent = `${(100 / state.Z).toFixed(0)}%`;
+
+            if (state.Z > 1.01) {
+                // Repulsion zone
+                txtImfRegime.textContent = "Repulsion Dominant";
+                txtImfRegime.className = "text-xs font-bold px-2 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200";
+                
+                statusGlow.className = "w-2.5 h-2.5 rounded-full bg-rose-600 shadow-[0_0_8px_rgba(225,29,72,0.6)] animate-pulse";
+                canvasBanner.textContent = "Repulsive Intermolecular Forces (Co-volume Exclusion)";
+                canvasBanner.className = "absolute top-4 right-4 px-3 py-1.5 rounded-lg border border-rose-200 bg-white/95 text-xs font-bold text-rose-700 shadow-sm pointer-events-none z-10";
+                simDominantForce.textContent = "Repulsive (Steric)";
+
+                descText.innerHTML = `At your active state variables, the compressibility factor is <strong>Z = ${state.Z.toFixed(4)}</strong>, which is greater than 1. This means the fluid's molar volume is larger than that of an ideal gas. <br><br>The molecules are packed so close together that the <strong>repulsive co-volume factor (b) dominates</strong> over molecular attraction. This is visually represented on the canvas by active, larger protective red repulsion fields around molecules.`;
+            } else if (state.Z < 0.99) {
+                // Attraction zone
+                txtImfRegime.textContent = "Attraction Dominant";
+                txtImfRegime.className = "text-xs font-bold px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 border border-cyan-200";
+                
+                statusGlow.className = "w-2.5 h-2.5 rounded-full bg-cyan-600 shadow-[0_0_8px_rgba(8,145,178,0.6)] animate-pulse";
+                canvasBanner.textContent = "Attractive Intermolecular Forces (Van der Waals Clumping)";
+                canvasBanner.className = "absolute top-4 right-4 px-3 py-1.5 rounded-lg border border-cyan-200 bg-white/95 text-xs font-bold text-cyan-700 shadow-sm pointer-events-none z-10";
+                simDominantForce.textContent = "Attractive (Van der Waals)";
+
+                descText.innerHTML = `At your active state variables, the compressibility factor is <strong>Z = ${state.Z.toFixed(4)}</strong>, which is less than 1. The fluid is highly compressible compared to an ideal gas. <br><br>At this density range, the <strong>cohesive attraction parameter (a) dominates</strong>. The visual simulator displays glowing blue attraction threads pulling particles into cohesive clusters.`;
+            } else {
+                // Near Ideal Gas Behavior
+                txtImfRegime.textContent = "Ideal Gas State";
+                txtImfRegime.className = "text-xs font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700 border border-slate-300";
+                
+                statusGlow.className = "w-2.5 h-2.5 rounded-full bg-slate-400";
+                canvasBanner.textContent = "Ideal Gas Region (Negligible IMFs)";
+                canvasBanner.className = "absolute top-4 right-4 px-3 py-1.5 rounded-lg border border-slate-200 bg-white/95 text-xs font-bold text-slate-700 shadow-sm pointer-events-none z-10";
+                simDominantForce.textContent = "None (Kinetic Only)";
+
+                descText.innerHTML = `The compressibility factor is <strong>Z = ${state.Z.toFixed(4)}</strong>, which is virtually 1. This is the ideal gas regime. <br><br>The temperature is high enough or the pressure is low enough that intermolecular attraction and repulsion forces are completely negligible. Particles move in classic straight paths, interacting strictly via brief elastic boundaries.`;
+            }
+        }
+
+        // Evaluate physical EoS parameters and roots
+        function evaluateEoS() {
+            state.Tr = parseFloat(sTr.value);
+            state.Pr = parseFloat(sPr.value);
+            state.omega = parseFloat(sOmega.value);
+
+            // Print dynamic numeric values onto DOM
+            vTr.textContent = state.Tr.toFixed(2);
+            vPr.textContent = state.Pr.toFixed(2);
+            vOmega.textContent = state.omega.toFixed(3);
+
+            // Fetch calculated parameters
+            const { A, B, alpha, kappa } = calculatePR(state.Tr, state.Pr, state.omega);
+            state.A = A;
+            state.B = B;
+
+            // Output specific values into dashboard
+            pA.textContent = A.toFixed(5);
+            pB.textContent = B.toFixed(5);
+            pAlpha.textContent = alpha.toFixed(4);
+
+            // Calculate beta and q parameters
+            const beta = B;
+            const q = B > 0 ? (A / B) : 0;
+            document.getElementById('param-beta').textContent = beta.toFixed(5);
+            document.getElementById('param-q').textContent = q.toFixed(4);
+
+            // Compute EoS roots
+            const roots = solvePRCubic(A, B);
+            state.roots = roots;
+            pRootsCount.textContent = `${roots.length} Real Root(s)`;
+
+            if (roots.length === 1) {
+                // One single real phase root
+                state.Z = roots[0];
+                rootContainer.classList.add('hidden');
+            } else if (roots.length === 3) {
+                // Multi-phase equilibrium boundaries
+                rootContainer.classList.remove('hidden');
+                
+                const zLiquid = roots[0];
+                const zVapor = roots[2];
+
+                rootValLiquid.textContent = `Z = ${zLiquid.toFixed(4)}`;
+                rootValVapor.textContent = `Z = ${zVapor.toFixed(4)}`;
+
+                // Update styling of buttons based on selected active physical state
+                if (state.activeRootType === 'liquid') {
+                    state.Z = zLiquid;
+                    btnRootLiquid.className = "py-2 px-3 rounded-lg border-2 border-[#4F2984] bg-[#4F2984]/10 text-xs font-bold text-[#4F2984] shadow-sm transition-all text-center";
+                    btnRootVapor.className = "py-2 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500 hover:text-slate-800 transition-all text-center";
+                } else {
+                    state.Z = zVapor;
+                    btnRootVapor.className = "py-2 px-3 rounded-lg border-2 border-[#4F2984] bg-[#4F2984]/10 text-xs font-bold text-[#4F2984] shadow-sm transition-all text-center";
+                    btnRootLiquid.className = "py-2 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-500 hover:text-slate-800 transition-all text-center";
+                }
+            } else {
+                state.Z = 1.0; // fallback safety
+            }
+
+            txtZVal.textContent = state.Z.toFixed(4);
+
+            // Trigger dynamic text updates & plots refresh
+            updateNarratives();
+            updateChartCurve();
+        }
+
+        // Set up active root selections
+        btnRootLiquid.addEventListener('click', () => {
+            state.activeRootType = 'liquid';
+            evaluateEoS();
+        });
+
+        btnRootVapor.addEventListener('click', () => {
+            state.activeRootType = 'vapor';
+            evaluateEoS();
+        });
+
+        // Sliders change event listeners
+        [sTr, sPr, sOmega].forEach(slider => {
+            slider.addEventListener('input', evaluateEoS);
+        });
+
+        // Reset particle locations trigger button
+        document.getElementById('btn-reset-sim').addEventListener('click', () => {
+            initParticles();
+        });
+
+        // Info Theory Modal events
+        const modal = document.getElementById('info-modal');
+        document.getElementById('btn-info-modal').addEventListener('click', () => {
+            modal.classList.remove('hidden');
+        });
+        [document.getElementById('btn-close-modal'), document.getElementById('btn-close-modal-bottom')].forEach(btn => {
+            btn.addEventListener('click', () => {
+                modal.classList.add('hidden');
+            });
+        });
+
+        // -------------------------------------------------------------
+        // Lifecycle Init on window loading
+        // -------------------------------------------------------------
+        window.onload = function() {
+            // Setup canvas sizes
+            resizeCanvas();
+            initParticles();
+            
+            // Setup graph plots
+            initChart();
+            
+            // Solve initial state
+            evaluateEoS();
+            
+            // Start Canvas animation looping
+            animate();
+        };
+
+    </script>
+</body>
+</html>
