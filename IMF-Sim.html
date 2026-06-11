@@ -560,10 +560,11 @@
             const speedMultiplier = Math.sqrt(state.Tr);
 
             // Make cohesion factor non-linear (cubic) to fully suppress weak attractions.
-            // This ensures that when Z is close to 1 (e.g. 0.95), attraction is virtually negligible,
-            // but scales up elegantly as deviation increases.
+            // This ensures that when Z is close to 1 (e.g. 0.95), attraction is virtually negligible.
             const cohesionFactor = attractionOn ? Math.pow(Math.abs(dev), 3.0) * 8.0 : 0;
-            const isLiquidPhase = (state.Z < 0.65) || (state.roots.length === 3 && state.activeRootType === 'liquid');
+            
+            // High-density liquid clumping only happens in the subcritical regime (Tr <= 1.0)
+            const isLiquidPhase = ((state.Z < 0.65) || (state.roots.length === 3 && state.activeRootType === 'liquid')) && state.Tr <= 1.0;
 
             // Double iteration over all pairwise particle combinations
             for (let i = 0; i < particles.length; i++) {
@@ -953,8 +954,28 @@
 
             // Visual details on Canvas panel labels
             const approxDensity = (state.Pr / (state.Tr * state.Z)).toFixed(2);
-            simDensity.textContent = approxDensity < 0.2 ? "Low (Gas)" : approxDensity > 1.4 ? "Very High (Liquid)" : "Medium Fluid";
-            simVolume.textContent = `${(100 / state.Z).toFixed(0)}%`;
+            
+            // Classify density dynamically ensuring Supercritical fluids are not classified as Liquid
+            let densityLabel = "Medium Fluid";
+            if (approxDensity < 0.2) {
+                densityLabel = "Low (Gas)";
+            } else if (approxDensity > 1.4) {
+                if (state.Tr > 1.0) {
+                    densityLabel = "Very High (Dense Supercritical)";
+                } else {
+                    densityLabel = "Very High (Liquid)";
+                }
+            } else {
+                if (state.Tr > 1.0) {
+                    densityLabel = "Medium (Supercritical Fluid)";
+                } else {
+                    densityLabel = "Medium Fluid";
+                }
+            }
+            simDensity.textContent = densityLabel;
+
+            // Corrected Effective Volume calculation V_real / V_ideal = Z * 100%
+            simVolume.textContent = `${(state.Z * 100).toFixed(0)}%`;
 
             if (state.Z > 1.01) {
                 // Repulsion zone
@@ -973,7 +994,13 @@
                 txtImfRegime.className = "text-xs font-bold px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 border border-cyan-200";
                 
                 statusGlow.className = "w-2.5 h-2.5 rounded-full bg-cyan-600 shadow-[0_0_8px_rgba(8,145,178,0.6)] animate-pulse";
-                canvasBanner.textContent = "Attractive Intermolecular Forces (Van der Waals Clumping)";
+                
+                if (state.Tr > 1.0) {
+                    canvasBanner.textContent = "Attractive Forces (Cohesive Supercritical Fluid)";
+                } else {
+                    canvasBanner.textContent = "Attractive Intermolecular Forces (Van der Waals Clumping)";
+                }
+                
                 canvasBanner.className = "absolute top-4 right-4 px-3 py-1.5 rounded-lg border border-cyan-200 bg-white/95 text-xs font-bold text-cyan-700 shadow-sm pointer-events-none z-10";
                 simDominantForce.textContent = "Attractive (Van der Waals)";
 
