@@ -505,12 +505,15 @@
 
             draw(Z, attractionStrength) {
                 // Draw Attraction Field halos in the background when attraction forces are active
+                // Scales quadratically so weak attraction (Z near 1) shows almost zero halo
                 if (Z < 0.99 && attractionStrength > 0.05) {
                     ctx.beginPath();
                     ctx.arc(this.x, this.y, 25, 0, Math.PI * 2);
-                    const haloAlpha = Math.min(attractionStrength * 0.12, 0.18);
-                    ctx.fillStyle = `rgba(8, 145, 178, ${haloAlpha})`;
-                    ctx.fill();
+                    const haloAlpha = Math.min(Math.pow(attractionStrength, 2) * 0.4, 0.18);
+                    if (haloAlpha > 0.005) {
+                        ctx.fillStyle = `rgba(8, 145, 178, ${haloAlpha})`;
+                        ctx.fill();
+                    }
                 }
 
                 // Main atomic center
@@ -556,10 +559,10 @@
             // Adjust speeds based on Temperature (Tr) - Higher Tr means higher kinetic velocity
             const speedMultiplier = Math.sqrt(state.Tr);
 
-            // Compute attraction based on deviation from ideality |Z-1|
-            // This represents the macroscopic physical attraction strength dynamically
-            const cohesionFactor = attractionOn ? Math.abs(dev) : 0;
-            const isLiquidPhase = (state.Z < 0.7) || (state.roots.length === 3 && state.activeRootType === 'liquid');
+            // Make cohesion factor non-linear (quadratic) to suppress weak attractions.
+            // This ensures that when Z is close to 1 (e.g. 0.95), attraction is virtually negligible.
+            const cohesionFactor = attractionOn ? Math.pow(Math.abs(dev), 2.2) * 1.5 : 0;
+            const isLiquidPhase = (state.Z < 0.65) || (state.roots.length === 3 && state.activeRootType === 'liquid');
 
             // Double iteration over all pairwise particle combinations
             for (let i = 0; i < particles.length; i++) {
@@ -627,18 +630,22 @@
                         if (chkForceVectors && chkForceVectors.checked) {
                             // Scale line visual density so it is clearly visible on white canvas
                             const normalizedIntensity = Math.min(forceMagnitude * 4, 1.0);
-                            const opacity = 0.15 + (normalizedIntensity * 0.75); // Range from 0.15 to 0.9 opacity
                             
-                            ctx.beginPath();
-                            ctx.moveTo(p1.x, p1.y);
-                            ctx.lineTo(p2.x, p2.y);
-                            ctx.strokeStyle = `rgba(8, 145, 178, ${opacity})`;
-                            ctx.lineWidth = isLiquidPhase ? (1.5 + normalizedIntensity * 1.5) : (0.5 + normalizedIntensity * 1.0);
-                            ctx.stroke();
+                            // Let the opacity drop off to 0 cleanly when the force is weak
+                            const opacity = normalizedIntensity * 0.85; 
+                            
+                            if (opacity > 0.01) {
+                                ctx.beginPath();
+                                ctx.moveTo(p1.x, p1.y);
+                                ctx.lineTo(p2.x, p2.y);
+                                ctx.strokeStyle = `rgba(8, 145, 178, ${opacity})`;
+                                ctx.lineWidth = isLiquidPhase ? (1.5 + normalizedIntensity * 1.5) : (0.5 + normalizedIntensity * 1.0);
+                                ctx.stroke();
 
-                            // Explicit directional arrows for non-liquid / gas molecules pulling on one another
-                            if (!isLiquidPhase && normalizedIntensity > 0.15 && dist > minDist + 10) {
-                                drawVectorArrow(p1.x, p1.y, p2.x, p2.y, opacity);
+                                // Explicit directional arrows for non-liquid / gas molecules pulling on one another
+                                if (!isLiquidPhase && normalizedIntensity > 0.25 && dist > minDist + 10) {
+                                    drawVectorArrow(p1.x, p1.y, p2.x, p2.y, opacity);
+                                }
                             }
                         }
                     }
@@ -659,6 +666,12 @@
                     // Provide a small randomized thermal brownian jiggle
                     p1.vx += (Math.random() - 0.5) * 0.15;
                     p1.vy += (Math.random() - 0.5) * 0.15;
+                } else if (attractionOn) {
+                    // Prevent artificial clustering in gas phase when attractions are very weak
+                    // Scale small thermal noise perturbation relative to the weakness of the IMF attraction
+                    const thermalNoise = 0.06 * speedMultiplier * (1 - Math.pow(Math.abs(dev), 2));
+                    p1.vx += (Math.random() - 0.5) * thermalNoise;
+                    p1.vy += (Math.random() - 0.5) * thermalNoise;
                 }
             }
         }
