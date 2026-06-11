@@ -505,12 +505,12 @@
 
             draw(Z, attractionStrength) {
                 // Draw Attraction Field halos in the background when attraction forces are active
-                // Scales quadratically so weak attraction (Z near 1) shows almost zero halo
+                // Scales cubically so weak attraction (Z near 1) shows virtually zero halo
                 if (Z < 0.99 && attractionStrength > 0.05) {
                     ctx.beginPath();
                     ctx.arc(this.x, this.y, 25, 0, Math.PI * 2);
-                    const haloAlpha = Math.min(Math.pow(attractionStrength, 2) * 0.4, 0.18);
-                    if (haloAlpha > 0.005) {
+                    const haloAlpha = Math.min(Math.pow(attractionStrength, 3.0) * 8.0, 0.18);
+                    if (haloAlpha > 0.001) {
                         ctx.fillStyle = `rgba(8, 145, 178, ${haloAlpha})`;
                         ctx.fill();
                     }
@@ -559,9 +559,10 @@
             // Adjust speeds based on Temperature (Tr) - Higher Tr means higher kinetic velocity
             const speedMultiplier = Math.sqrt(state.Tr);
 
-            // Make cohesion factor non-linear (quadratic) to suppress weak attractions.
-            // This ensures that when Z is close to 1 (e.g. 0.95), attraction is virtually negligible.
-            const cohesionFactor = attractionOn ? Math.pow(Math.abs(dev), 2.2) * 1.5 : 0;
+            // Make cohesion factor non-linear (cubic) to fully suppress weak attractions.
+            // This ensures that when Z is close to 1 (e.g. 0.95), attraction is virtually negligible,
+            // but scales up elegantly as deviation increases.
+            const cohesionFactor = attractionOn ? Math.pow(Math.abs(dev), 3.0) * 8.0 : 0;
             const isLiquidPhase = (state.Z < 0.65) || (state.roots.length === 3 && state.activeRootType === 'liquid');
 
             // Double iteration over all pairwise particle combinations
